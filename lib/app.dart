@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'data/app_state.dart';
+import 'data/mock_data.dart';
+import 'data/models.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_typography.dart';
 
 /// جذر تطبيق بنتارا.
 ///
-/// TODO(batch-2): تُستبدل الحالة المؤقتة (_mode و_index) بـ AppState
-/// الحقيقي في lib/data/app_state.dart عبر InheritedNotifier، وتُحذف
-/// _Shell و_TempBottomBar و_PlaceholderScreen و_TempThemeToggle من هذا الملف.
+/// ينشئ [AppState] مرة واحدة ويتخلّص منه. يستمع لتغيّر المظهر وحده قبل
+/// setState، فلا تعيد نبضات المحاكاة بناء MaterialApp. وتُحقن الحالة داخل
+/// builder فتراها كل المسارات.
 class PentaraApp extends StatefulWidget {
   const PentaraApp({super.key});
 
@@ -19,18 +22,27 @@ class PentaraApp extends StatefulWidget {
 }
 
 class _PentaraAppState extends State<PentaraApp> {
-  ThemeMode _mode = ThemeMode.light;
-  int _index = 0;
+  late final AppState _app;
+  late ThemeMode _mode;
 
-  void _toggleMode() {
-    setState(() {
-      _mode = _mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _app = AppState();
+    _mode = _app.themeMode;
+    _app.addListener(_onAppChanged);
   }
 
-  void _select(int i) {
-    if (i == _index) return;
-    setState(() => _index = i);
+  void _onAppChanged() {
+    if (_app.themeMode == _mode) return;
+    setState(() => _mode = _app.themeMode);
+  }
+
+  @override
+  void dispose() {
+    _app.removeListener(_onAppChanged);
+    _app.dispose();
+    super.dispose();
   }
 
   @override
@@ -50,11 +62,11 @@ class _PentaraAppState extends State<PentaraApp> {
       themeMode: _mode,
       themeAnimationDuration: const Duration(milliseconds: 350),
       themeAnimationCurve: Curves.easeOutCubic,
-      home: _Shell(
-        index: _index,
-        onSelect: _select,
-        onToggleMode: _toggleMode,
+      builder: (context, child) => AppStateScope(
+        state: _app,
+        child: child ?? const SizedBox.shrink(),
       ),
+      home: const _Shell(),
     );
   }
 }
@@ -69,19 +81,58 @@ const List<String> _tabLabels = [
   'حسابي',
 ];
 
+const int _tableTabIndex = 1;
 const int _accountTabIndex = 4;
 
-// TODO(batch-2): يُستبدل بالهيكل الحقيقي مع bottom_nav.dart والشاشات.
-class _Shell extends StatelessWidget {
-  const _Shell({
-    required this.index,
-    required this.onSelect,
-    required this.onToggleMode,
-  });
+/// غلاف التنقل: يملك فهرس التبويب ويراقب دورة حياة التطبيق، ويبلّغ
+/// [AppState] بظهور الطاولة فقط: ظهور التبويب والتطبيق في المقدمة شرطان.
+// TODO(batch-3): يُستبدل بالهيكل الحقيقي مع bottom_nav.dart والشاشات.
+class _Shell extends StatefulWidget {
+  const _Shell();
 
-  final int index;
-  final ValueChanged<int> onSelect;
-  final VoidCallback onToggleMode;
+  @override
+  State<_Shell> createState() => _ShellState();
+}
+
+class _ShellState extends State<_Shell> with WidgetsBindingObserver {
+  int _index = 0;
+  bool _resumed = true;
+  AppState? _app;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _app = AppStateScope.read(context);
+    _syncTableVisibility();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _resumed = state == AppLifecycleState.resumed;
+    _syncTableVisibility();
+  }
+
+  void _syncTableVisibility() {
+    _app?.setTableVisible(_index == _tableTabIndex && _resumed);
+  }
+
+  void _select(int i) {
+    if (i == _index) return;
+    setState(() => _index = i);
+    _syncTableVisibility();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,33 +155,35 @@ class _Shell extends StatelessWidget {
         body: SafeArea(
           bottom: false,
           child: IndexedStack(
-            index: index,
+            index: _index,
             children: [
               for (var i = 0; i < _tabLabels.length; i++)
                 _PlaceholderScreen(
                   title: _tabLabels[i],
-                  trailing: i == _accountTabIndex
-                      ? _TempThemeToggle(onTap: onToggleMode)
-                      : null,
+                  extra: switch (i) {
+                    _tableTabIndex => const _TempTableStatus(),
+                    _accountTabIndex => const _TempThemeToggle(),
+                    _ => null,
+                  },
                 ),
             ],
           ),
         ),
         bottomNavigationBar: _TempBottomBar(
-          index: index,
-          onSelect: onSelect,
+          index: _index,
+          onSelect: _select,
         ),
       ),
     );
   }
 }
 
-// TODO(batch-2): تُستبدل بشاشات lib/screens/.
+// TODO(batch-3): تُستبدل بشاشات lib/screens/.
 class _PlaceholderScreen extends StatelessWidget {
-  const _PlaceholderScreen({required this.title, this.trailing});
+  const _PlaceholderScreen({required this.title, this.extra});
 
   final String title;
-  final Widget? trailing;
+  final Widget? extra;
 
   @override
   Widget build(BuildContext context) {
@@ -146,9 +199,9 @@ class _PlaceholderScreen extends StatelessWidget {
               textAlign: TextAlign.center,
               style: AppTypography.title.copyWith(color: c.ink),
             ),
-            if (trailing != null) ...[
+            if (extra != null) ...[
               const SizedBox(height: 24),
-              trailing!,
+              extra!,
             ],
           ],
         ),
@@ -157,13 +210,106 @@ class _PlaceholderScreen extends StatelessWidget {
   }
 }
 
-/// زر مؤقت لتبديل المظهر. يستخدم InkWell ونصاً بلون ink،
-/// لا TextButton، حتى لا يرث لون ColorScheme.primary.
-// TODO(batch-2): يُستبدل بزر المظهر الحقيقي في account_screen.dart.
-class _TempThemeToggle extends StatelessWidget {
-  const _TempThemeToggle({required this.onTap});
+/// عرض مؤقت لحالة المحاكاة للتحقق من الطبقة. يعتمد على AppState
+/// وحده من بين العناصر المؤقتة، فيُعاد بناؤه مع كل نبضة دون غيره.
+// TODO(batch-3): يُحذف مع بناء table_screen.dart.
+class _TempTableStatus extends StatelessWidget {
+  const _TempTableStatus();
 
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final app = AppStateScope.of(context);
+    final project = app.activeProject;
+    final speakerId = app.centerMemberId;
+    final speaker =
+        speakerId == null ? 'لا يوجد' : MockData.memberOf(speakerId).title;
+
+    final lines = <String>[
+      project?.name ?? '',
+      'المتحدث: $speaker',
+      toArabicDigits(
+        'الجولة ${app.currentRound} — الرسائل ${app.cursor} من ${app.messageCount}',
+      ),
+      app.summaryVisible
+          ? 'الخلاصة ظاهرة'
+          : (app.isRunning ? 'المحاكاة تعمل' : 'المحاكاة متوقفة'),
+    ];
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.all(16),
+      decoration: ShapeDecoration(
+        color: c.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: c.border),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final line in lines)
+            Text(
+              line,
+              textAlign: TextAlign.center,
+              style: AppTypography.label.copyWith(color: c.inkMuted),
+            ),
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _TempAction(label: 'إعادة', onTap: app.restartSimulation),
+              _TempAction(label: 'الخلاصة', onTap: app.jumpToSummary),
+              _TempAction(label: 'حفظ', onTap: app.saveSummary),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TempAction extends StatelessWidget {
+  const _TempAction({required this.label, required this.onTap});
+
+  final String label;
   final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            shape: StadiumBorder(side: BorderSide(color: c.border)),
+          ),
+          child: Text(
+            label,
+            style: AppTypography.label.copyWith(color: c.ink),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// زر مؤقت لتبديل المظهر. InkWell ونص بلون ink، لا TextButton،
+/// حتى لا يرث لون ColorScheme.primary.
+// TODO(batch-3): يُستبدل بزر المظهر الحقيقي في account_screen.dart.
+class _TempThemeToggle extends StatelessWidget {
+  const _TempThemeToggle();
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +323,7 @@ class _TempThemeToggle extends StatelessWidget {
       label: label,
       excludeSemantics: true,
       child: InkWell(
-        onTap: onTap,
+        onTap: AppStateScope.read(context).toggleTheme,
         customBorder: const StadiumBorder(),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
@@ -201,7 +347,7 @@ class _TempThemeToggle extends StatelessWidget {
 
 /// شريط تنقل سفلي مؤقت: نص ونقطة ذهبية تحت التبويب النشط.
 /// surface وحد علوي border، بلا ظل.
-// TODO(batch-2): يُستبدل بـ lib/widgets/bottom_nav.dart برموز CustomPainter.
+// TODO(batch-3): يُستبدل بـ lib/widgets/bottom_nav.dart برموز CustomPainter.
 class _TempBottomBar extends StatelessWidget {
   const _TempBottomBar({required this.index, required this.onSelect});
 

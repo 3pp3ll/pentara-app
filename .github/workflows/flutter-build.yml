@@ -48,6 +48,23 @@ jobs:
           [ -d /tmp/keep/assets ] && cp -r /tmp/keep/assets . || true
           [ -d /tmp/keep/test ] && cp -r /tmp/keep/test . || true
 
+      - name: App icon and name
+        run: |
+          if [ -d assets/launcher ]; then
+            for d in assets/launcher/mipmap-*; do
+              [ -d "$d" ] || continue
+              mkdir -p "android/app/src/main/res/$(basename "$d")"
+              cp "$d"/* "android/app/src/main/res/$(basename "$d")/"
+            done
+            [ -f assets/launcher/web/favicon.png ] && cp assets/launcher/web/favicon.png web/favicon.png || true
+            [ -d assets/launcher/web/icons ] && cp assets/launcher/web/icons/*.png web/icons/ || true
+          fi
+          if [ -f assets/launcher/label.txt ]; then
+            L=$(head -1 assets/launcher/label.txt | tr -d '\r')
+            sed -i "s|android:label=\"[^\"]*\"|android:label=\"$L\"|" android/app/src/main/AndroidManifest.xml
+            sed -i "s|<title>[^<]*</title>|<title>$L</title>|" web/index.html
+          fi
+
       - run: flutter pub get
 
       - name: Analyze
