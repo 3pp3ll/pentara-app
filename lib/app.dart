@@ -5,6 +5,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'data/app_state.dart';
 import 'data/mock_data.dart';
 import 'data/models.dart';
+import 'screens/home_screen.dart';
+import 'screens/projects_screen.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_typography.dart';
@@ -12,14 +14,12 @@ import 'widgets/bottom_nav.dart';
 import 'widgets/gold_button.dart';
 import 'widgets/member_avatar.dart';
 import 'widgets/member_icons.dart';
-import 'widgets/pentara_logo.dart';
-import 'widgets/status_chip.dart';
 
 /// جذر تطبيق بنتارا.
 ///
 /// ينشئ [AppState] مرة واحدة ويتخلّص منه. يستمع لتغيّر المظهر وحده قبل
-/// setState، فلا تعيد نبضات المحاكاة بناء MaterialApp عند كل خطوة. وتُحقن الحالة داخل
-/// builder فتراها كل المسارات.
+/// setState، فلا تعيد نبضات المحاكاة بناء MaterialApp عند كل خطوة. وتُحقن
+/// الحالة داخل builder فتراها كل المسارات.
 class PentaraApp extends StatefulWidget {
   const PentaraApp({super.key});
 
@@ -79,9 +79,10 @@ class _PentaraAppState extends State<PentaraApp> {
 
 const int _homeTabIndex = 0;
 const int _tableTabIndex = 1;
+const int _projectsTabIndex = 2;
 const int _accountTabIndex = 4;
 
-/// أسماء التبويبات المؤقتة بالترتيب من اليمين (الفهرس 0 = الرئيسية).
+/// عنوان التبويب المؤقت (المختبر فقط حالياً).
 const List<String> _tabTitles = [
   'الرئيسية',
   'الطاولة',
@@ -91,10 +92,12 @@ const List<String> _tabTitles = [
 ];
 
 /// غلاف التنقل: يملك فهرس التبويب ويراقب دورة حياة التطبيق، ويبلّغ
-/// [AppState] بظهور الطاولة فقط: ظهور التبويب والتطبيق في المقدمة شرطان.
-/// كل تبويب يُلفّ بـ TickerMode فلا يستمر نبض الأقراص في التبويبات المخفية
-/// (IndexedStack يُبقيها مركّبة).
-// TODO(batch-4): تُستبدل الشاشات المؤقتة بشاشات lib/screens/.
+/// [AppState] بظهور الطاولة فقط (ظهور التبويب والتطبيق في المقدمة شرطان).
+/// وهو وحده يختار المشروع ويبدّل التبويب ويعرض التنبيهات على سقالته
+/// الواحدة، فيظهر التنبيه فوق الشريط السفلي.
+/// كل تبويب يُلفّ بـ TickerMode فلا يستمر نبض الأقراص في تبويب مخفي
+/// (IndexedStack يُبقيها مركّبة). لا مفتاح متغيّر، فتبقى حالة البحث والتمرير.
+// TODO(batch-5): تُستبدل الشاشات المؤقتة (الطاولة والمختبر وحسابي).
 class _Shell extends StatefulWidget {
   const _Shell();
 
@@ -136,6 +139,47 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     _syncTableVisibility();
   }
 
+  /// تنبيه بألوان صريحة (لا snackBarTheme في الثيم): خلفية ink ونص bg.
+  void _notify(String message) {
+    final c = context.colors;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: c.ink,
+        elevation: 0,
+        margin: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        duration: const Duration(seconds: 3),
+        content: Text(
+          message,
+          style: AppTypography.label.copyWith(color: c.bg),
+        ),
+      ),
+    );
+  }
+
+  /// «مشروع جديد»: يختار السيناريو التجريبي الافتراضي ويفتح الطاولة.
+  /// لا يعيد المحاكاة ولا يَعِد بموضع معيّن لها.
+  void _newProject() {
+    _app?.selectProject(MockData.defaultProjectId);
+    _select(_tableTabIndex);
+    _notify('يُفتح السيناريو التجريبي المُعدّ مسبقاً');
+  }
+
+  /// الضغط على بطاقة مشروع: يختار معرّفه ثم يفتح الطاولة.
+  void _openProject(String id) {
+    _app?.selectProject(id);
+    _select(_tableTabIndex);
+  }
+
+  void _showNoNotifications() {
+    _notify('لا توجد إشعارات في الوضع التجريبي');
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -144,7 +188,12 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
 
   Widget _screen(int i) {
     return switch (i) {
-      _homeTabIndex => const _TempHome(),
+      _homeTabIndex => HomeScreen(
+          onNewProject: _newProject,
+          onOpenProject: _openProject,
+          onNotifications: _showNoNotifications,
+        ),
+      _projectsTabIndex => ProjectsScreen(onOpenProject: _openProject),
       _tableTabIndex => const _TempTable(),
       _accountTabIndex => const _TempAccount(),
       _ => _TempTitleOnly(title: _tabTitles[i]),
@@ -214,56 +263,10 @@ class _TempTitleOnly extends StatelessWidget {
   }
 }
 
-// TODO(batch-4): يُستبدل بـ home_screen.dart.
-class _TempHome extends StatelessWidget {
-  const _TempHome();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const PentaraLogo(markSize: 56),
-            const SizedBox(height: 24),
-            Text(
-              MockData.homeGreeting,
-              textAlign: TextAlign.center,
-              style: AppTypography.title.copyWith(color: c.ink),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              MockData.homeDateLabel,
-              textAlign: TextAlign.center,
-              style: AppTypography.label.copyWith(color: c.inkMuted),
-            ),
-            const SizedBox(height: 24),
-            GoldButton.primary(label: 'مشروع جديد', onTap: () {}),
-            const SizedBox(height: 12),
-            StatusChip.tag(label: MockData.lastSessionBadge),
-            const SizedBox(height: 24),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                for (final m in MockData.members)
-                  MemberAvatar(member: m, size: 52),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// عرض مؤقت لحالة المحاكاة للتحقق من الطبقة. يعتمد على AppState
-/// وحده، فيُعاد بناؤه مع كل نبضة دون غيره.
-// TODO(batch-4): يُحذف مع بناء table_screen.dart.
+/// عرض مؤقت لحالة المحاكاة للتحقق من الطبقة. يقرأ الجالبات العامة فقط،
+/// ويُعاد بناؤه مع كل نبضة دون غيره. مشروع بلا نقاش (messageCount == 0)
+/// يعرض رسالة عدم التوفر ولا يستعير نقاش مشروع آخر.
+// TODO(batch-5): يُحذف مع بناء table_screen.dart.
 class _TempTable extends StatelessWidget {
   const _TempTable();
 
@@ -272,6 +275,7 @@ class _TempTable extends StatelessWidget {
     final c = context.colors;
     final app = AppStateScope.of(context);
     final project = app.activeProject;
+    final hasDiscussion = app.messageCount > 0;
     final speakerId = app.centerMemberId;
     final speaker = speakerId == null ? null : MockData.memberOf(speakerId);
 
@@ -301,67 +305,75 @@ class _TempTable extends StatelessWidget {
                 style: AppTypography.title.copyWith(color: c.ink),
               ),
               const SizedBox(height: 12),
-              if (speaker != null) ...[
-                MemberAvatar(
-                  member: speaker,
-                  size: 64,
-                  isSpeaking: app.isRunning,
-                ),
+              if (!hasDiscussion)
+                Text(
+                  'لا يوجد سيناريو تجريبي مُعدّ لهذا المشروع',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.label.copyWith(color: c.inkMuted),
+                )
+              else ...[
+                if (speaker != null) ...[
+                  MemberAvatar(
+                    member: speaker,
+                    size: 64,
+                    isSpeaking: app.isRunning,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      MemberIcon(
+                        symbol: speaker.symbol,
+                        size: 18,
+                        color: c.memberName(speaker.id),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        speaker.title,
+                        style: AppTypography.bodyStrong
+                            .copyWith(color: c.memberName(speaker.id)),
+                      ),
+                    ],
+                  ),
+                ] else
+                  Text(
+                    'لا يوجد متحدث',
+                    style: AppTypography.label.copyWith(color: c.inkMuted),
+                  ),
                 const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Text(
+                  toArabicDigits(
+                    'الجولة ${app.currentRound} — الرسائل ${app.cursor} من ${app.messageCount}',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: AppTypography.label.copyWith(color: c.inkMuted),
+                ),
+                Text(
+                  status,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.label.copyWith(color: c.inkMuted),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    MemberIcon(
-                      symbol: speaker.symbol,
-                      size: 18,
-                      color: c.memberName(speaker.id),
+                    GoldButton.secondary(
+                      label: 'إعادة',
+                      onTap: app.restartSimulation,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      speaker.title,
-                      style: AppTypography.bodyStrong
-                          .copyWith(color: c.memberName(speaker.id)),
+                    GoldButton.secondary(
+                      label: 'الخلاصة',
+                      onTap: app.jumpToSummary,
+                    ),
+                    GoldButton.secondary(
+                      label: 'حفظ',
+                      onTap: app.saveSummary,
                     ),
                   ],
                 ),
-              ] else
-                Text(
-                  'لا يوجد متحدث',
-                  style: AppTypography.label.copyWith(color: c.inkMuted),
-                ),
-              const SizedBox(height: 8),
-              Text(
-                toArabicDigits(
-                  'الجولة ${app.currentRound} — الرسائل ${app.cursor} من ${app.messageCount}',
-                ),
-                textAlign: TextAlign.center,
-                style: AppTypography.label.copyWith(color: c.inkMuted),
-              ),
-              Text(
-                status,
-                textAlign: TextAlign.center,
-                style: AppTypography.label.copyWith(color: c.inkMuted),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  GoldButton.secondary(
-                    label: 'إعادة',
-                    onTap: app.restartSimulation,
-                  ),
-                  GoldButton.secondary(
-                    label: 'الخلاصة',
-                    onTap: app.jumpToSummary,
-                  ),
-                  GoldButton.secondary(
-                    label: 'حفظ',
-                    onTap: app.saveSummary,
-                  ),
-                ],
-              ),
+              ],
             ],
           ),
         ),
@@ -370,7 +382,7 @@ class _TempTable extends StatelessWidget {
   }
 }
 
-// TODO(batch-4): يُستبدل بزر المظهر الحقيقي في account_screen.dart.
+// TODO(batch-5): يُستبدل بزر المظهر الحقيقي في account_screen.dart.
 class _TempAccount extends StatelessWidget {
   const _TempAccount();
 
