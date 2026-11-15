@@ -310,30 +310,33 @@ abstract final class MockData {
 
   /// قمع «جاهزية المنتج»: قيم مستقلة (الـ12 مكرر حرفياً لا متغير مشترك).
   static const List<ReadinessCount> readinessFunnel = [
-    ReadinessCount(label: 'مُولَّد', count: 12, tone: StatusTone.neutral),
-    ReadinessCount(label: 'مُراجَع', count: 10, tone: StatusTone.info),
-    ReadinessCount(label: 'مُختبَر', count: 4, tone: StatusTone.warn),
-    ReadinessCount(label: 'موثَّق', count: 3, tone: StatusTone.ok),
+    ReadinessCount(stage: ReadinessStage.generated, count: 12),
+    ReadinessCount(stage: ReadinessStage.reviewed, count: 10),
+    ReadinessCount(stage: ReadinessStage.tested, count: 4),
+    ReadinessCount(stage: ReadinessStage.documented, count: 3),
   ];
 
   /// ثلاث جلسات مقيَّمة. الأولى مختارة افتراضياً؛ متوسطها 87 مصادفة بيانات.
-  static const List<Evaluation> evaluations = [
+  static final List<Evaluation> evaluations = [
     Evaluation(
       id: 'e-perfume',
       projectId: 'p-perfume',
       title: 'جلسة متجر العطور الفاخرة',
+      whenLabel: 'اليوم',
       scores: [90, 86, 84, 89, 86],
     ),
     Evaluation(
       id: 'e-courts',
       projectId: 'p-courts',
       title: 'جلسة منصة حجز الملاعب',
+      whenLabel: 'أمس',
       scores: [94, 92, 90, 93, 91],
     ),
     Evaluation(
       id: 'e-study',
       projectId: 'p-study',
       title: 'جلسة مساعد المذاكرة',
+      whenLabel: 'قبل ٣ أيام',
       scores: [82, 78, 74, 81, 80],
     ),
   ];
