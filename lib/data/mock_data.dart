@@ -12,7 +12,7 @@ abstract final class MockData {
   /// ثابتان: لا DateTime.now().
   static final String homeGreeting = 'مساء الخير، ${account.displayName}';
   static final String homeDateLabel =
-      toArabicDigits('الخميس، 15 مايو 2025');
+      toArabicDigits('الأحد، 15 نوفمبر 2026');
 
   /// شارة «آخر جلسة: $0.42». ثابت عرض مستقل عن تكاليف البطاقات.
   static const int lastSessionCostCents = 42;
@@ -265,6 +265,7 @@ abstract final class MockData {
 
   /// الخلاصة حقل على سيناريو العطور فقط، مؤلفها رئيس الجلسة.
   static const Summary _perfumeSummary = Summary(
+    projectId: 'p-perfume',
     authorId: MemberId.chair,
     title: 'خلاصة مشروع متجر العطور الفاخرة',
     points: [
@@ -277,7 +278,7 @@ abstract final class MockData {
     readiness: ReadinessStage.reviewed,
   );
 
-  static const Scenario perfumeScenario = Scenario(
+  static final Discussion perfumeScenario = Discussion(
     projectId: 'p-perfume',
     roundTitles: _perfumeRoundTitles,
     messages: _perfumeMessages,
@@ -285,13 +286,13 @@ abstract final class MockData {
   );
 
   /// المشاريع بلا سيناريو لا تعرض نقاش العطور تحت اسم آخر.
-  static Scenario? scenarioOf(String projectId) =>
+  static Discussion? scenarioOf(String projectId) =>
       projectId == perfumeScenario.projectId ? perfumeScenario : null;
 
   // ---- المختبر -------------------------------------------------------------
 
   /// المؤشرات الأربعة ثوابت مستقلة: لا تُحسب من الجلسة المختارة.
-  static const LabMetrics labMetrics = LabMetrics(
+  static const LabStats labMetrics = LabStats(
     totalTests: 12,
     averageScore: 87,
     simulationCostHalalas: 1860,

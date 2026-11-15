@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import 'mock_data.dart';
@@ -62,7 +62,7 @@ class AppState extends ChangeNotifier {
   /// عدد الرسائل المكشوفة. الافتراضي = طول الجولة ١.
   int get cursor => _cursor;
 
-  Scenario? get scenario => MockData.scenarioOf(_activeProjectId);
+  Discussion? get scenario => MockData.scenarioOf(_activeProjectId);
 
   int get messageCount => scenario?.messages.length ?? 0;
 
