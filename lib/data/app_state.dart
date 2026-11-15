@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../theme/app_colors.dart';
 import 'mock_data.dart';
@@ -34,6 +34,23 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- الحساب (يُقرأ من MockData.account بلا نسخة ثانية) -------------------
+
+  String get userId => MockData.account.userId;
+  String get memberSince => MockData.account.memberSince;
+  int get points => MockData.account.points;
+
+  // ---- تخطيط صف الأعضاء في الرئيسية ----------------------------------------
+
+  MembersLayout _membersLayout = MembersLayout.row;
+  MembersLayout get membersLayout => _membersLayout;
+
+  set membersLayout(MembersLayout value) {
+    if (value == _membersLayout) return;
+    _membersLayout = value;
+    notifyListeners();
+  }
+
   // ---- المشروع النشط -------------------------------------------------------
 
   String _activeProjectId = MockData.defaultProjectId;
@@ -62,12 +79,12 @@ class AppState extends ChangeNotifier {
   /// عدد الرسائل المكشوفة. الافتراضي = طول الجولة ١.
   int get cursor => _cursor;
 
-  Discussion? get scenario => MockData.scenarioOf(_activeProjectId);
+  Discussion? get discussion => MockData.discussionOf(_activeProjectId);
 
-  int get messageCount => scenario?.messages.length ?? 0;
+  int get messageCount => discussion?.messages.length ?? 0;
 
   List<Message> get visibleMessages {
-    final s = scenario;
+    final s = discussion;
     if (s == null) return const [];
     return s.messages.take(_cursor).toList(growable: false);
   }
@@ -75,9 +92,9 @@ class AppState extends ChangeNotifier {
   bool get isRunning => _timer != null;
 
   /// الخلاصة ظاهرة عند اكتمال كل الرسائل.
-  bool get summaryVisible => scenario != null && _cursor >= messageCount;
+  bool get summaryVisible => discussion != null && _cursor >= messageCount;
 
-  Summary? get summary => summaryVisible ? scenario!.summary : null;
+  Summary? get summary => summaryVisible ? discussion!.summary : null;
 
   double get progress {
     final n = messageCount;
@@ -85,7 +102,7 @@ class AppState extends ChangeNotifier {
   }
 
   int get roundCount {
-    final s = scenario;
+    final s = discussion;
     if (s == null) return 0;
     var maxRound = 0;
     for (final m in s.messages) {
@@ -96,14 +113,14 @@ class AppState extends ChangeNotifier {
 
   /// الجولة النشطة: جولة الرسالة التالية، وعند الاكتمال آخر جولة.
   int get currentRound {
-    final s = scenario;
+    final s = discussion;
     if (s == null || s.messages.isEmpty) return 1;
     if (_cursor < s.messages.length) return s.messages[_cursor].roundNumber;
     return s.messages.last.roundNumber;
   }
 
   RoundProgress roundProgress(int round) {
-    final s = scenario;
+    final s = discussion;
     if (s == null) return RoundProgress.pending;
     var lastIndex = -1;
     for (var i = 0; i < s.messages.length; i++) {
@@ -117,7 +134,7 @@ class AppState extends ChangeNotifier {
 
   /// صاحب آخر رسالة مكشوفة. عند الصفر: صاحب أول رسالة. بلا سيناريو: null.
   MemberId? get lastSpeakerId {
-    final s = scenario;
+    final s = discussion;
     if (s == null || s.messages.isEmpty) return null;
     if (_cursor <= 0) return s.messages.first.senderId;
     final i = _cursor > s.messages.length ? s.messages.length : _cursor;
@@ -126,14 +143,14 @@ class AppState extends ChangeNotifier {
 
   /// من يظهر في مركز الطاولة. تعود إلى مؤلف الخلاصة فقط حين تظهر.
   MemberId? get centerMemberId {
-    final s = scenario;
+    final s = discussion;
     if (s == null) return null;
     if (summaryVisible) return s.summary.authorId;
     return lastSpeakerId;
   }
 
   int _initialCursorFor(String projectId) {
-    final s = MockData.scenarioOf(projectId);
+    final s = MockData.discussionOf(projectId);
     if (s == null) return 0;
     var n = 0;
     for (final m in s.messages) {
@@ -164,7 +181,7 @@ class AppState extends ChangeNotifier {
 
   /// «انتقل إلى الخلاصة»: يكمل السيناريو فوراً. التمرير مسؤولية الواجهة.
   void jumpToSummary() {
-    if (scenario == null) return;
+    if (discussion == null) return;
     _stop();
     _cursor = messageCount;
     notifyListeners();
@@ -172,7 +189,7 @@ class AppState extends ChangeNotifier {
 
   void _ensureRunning() {
     if (!_tableVisible) return;
-    if (scenario == null) return;
+    if (discussion == null) return;
     if (_cursor >= messageCount) return;
     if (_timer != null) return; // لا مؤقّتين ولا إعادة مهلة.
     final gen = _generation;

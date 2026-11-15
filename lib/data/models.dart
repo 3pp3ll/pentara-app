@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../theme/app_colors.dart';
 
 // ---------------------------------------------------------------------------
@@ -34,6 +36,31 @@ String formatSar(int halalas) {
   final whole = halalas ~/ 100;
   final rest = halalas % 100;
   return '$whole.${rest.toString().padLeft(2, '0')} ر.س';
+}
+
+/// فاصل آلاف غربي: 1500 → 1,500. (للمؤشرات: أرقام غربية.)
+String formatThousands(int value) {
+  final s = value.abs().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(s[i]);
+  }
+  return value < 0 ? '-$buffer' : buffer.toString();
+}
+
+/// معرّف المالك الثابت.
+const String ownerUserId = '10000000';
+
+/// معرّف مستخدم آخر: ثماني خانات عشوائية (0–9، وتشمل الأصفار على اليسار)،
+/// ويُرفض معرّف المالك وحده. العشوائية المحلية لا تضمن التفرّد بين
+/// المستخدمين دون سجل مركزي. لا يُستدعى داخل build.
+String generateRandomUserId([math.Random? rng]) {
+  final r = rng ?? math.Random();
+  while (true) {
+    final id = List<int>.generate(8, (_) => r.nextInt(10)).join();
+    if (id != ownerUserId) return id;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -344,14 +371,26 @@ class Plan {
   String get priceLabel => formatUsd(priceCents);
 }
 
+/// حساب المستخدم. الحقول الثلاثة الأخيرة بقيم افتراضية حتى يبقى أي استدعاء
+/// قديم بثلاثة معاملات صالحاً.
 class Account {
   const Account({
     required this.displayName,
     required this.currentPlanId,
     required this.credit,
+    this.userId = ownerUserId,
+    this.memberSince = 'نوفمبر ٢٠٢٦',
+    this.points = 1500,
   });
 
   final String displayName;
   final String currentPlanId;
   final CreditBalance credit;
+
+  /// معرّف المالك '10000000'. مستخدمون آخرون: generateRandomUserId().
+  final String userId;
+
+  /// سرد (أرقام عربية). مستقل عن تاريخ الجهاز.
+  final String memberSince;
+  final int points;
 }

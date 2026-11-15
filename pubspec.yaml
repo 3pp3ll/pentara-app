@@ -6,12 +6,14 @@ version: 1.0.0+1
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
-# المرجع ملزم: Flutter SDK و flutter_localizations فقط.
+# المرجع: Flutter SDK و flutter_localizations فقط،
+# مع استثناء وحيد منصوص عليه: qr_flutter لرسم رمز QR في «حسابي».
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

@@ -5,14 +5,10 @@ import 'models.dart';
 ///
 /// ما ورد في المرجع حرفياً: الأعضاء الستة، حالات المشاريع الخمس، أرقام المختبر،
 /// الرصيد، الباقات، شارة «آخر جلسة». أما أسماء المشاريع ونص النقاش
-/// وأوصافهما فهي بيانات تجريبية مؤلَّفة، وليست من المرجع.
+/// وأوصافهما وجلستا المختبر الإضافيتان فهي بيانات تجريبية مؤلَّفة،
+/// وليست من المرجع.
 abstract final class MockData {
   // ---- الرئيسية ----------------------------------------------------------
-
-  /// ثابتان: لا DateTime.now().
-  static final String homeGreeting = 'مساء الخير، ${account.displayName}';
-  static final String homeDateLabel =
-      toArabicDigits('الأحد، 15 نوفمبر 2026');
 
   /// شارة «آخر جلسة: $0.42». ثابت عرض مستقل عن تكاليف البطاقات.
   static const int lastSessionCostCents = 42;
@@ -242,7 +238,8 @@ abstract final class MockData {
       id: 'm12',
       senderId: MemberId.analyst,
       roundNumber: 3,
-      text: 'نبدأ جمع المؤشرات الثلاثة من أول أسبوع من الإطلاق التجريبي، ونراجعها مع كل جولة تحسين.',
+      text: 'نبدأ جمع المؤشرات الثلاثة من أول أسبوع من الإطلاق التجريبي، '
+          'ونراجعها مع كل جولة تحسين.',
       verdict: MessageVerdict.valid,
       reason: 'قياس مبكر بلا افتراضات غير مسنودة.',
     ),
@@ -278,7 +275,8 @@ abstract final class MockData {
     readiness: ReadinessStage.reviewed,
   );
 
-  static final Discussion perfumeScenario = Discussion(
+  /// المُنشئ غير const لأنه يحسب الجولات من الرسائل.
+  static final Discussion perfumeDiscussion = Discussion(
     projectId: 'p-perfume',
     roundTitles: _perfumeRoundTitles,
     messages: _perfumeMessages,
@@ -286,13 +284,13 @@ abstract final class MockData {
   );
 
   /// المشاريع بلا سيناريو لا تعرض نقاش العطور تحت اسم آخر.
-  static Discussion? scenarioOf(String projectId) =>
-      projectId == perfumeScenario.projectId ? perfumeScenario : null;
+  static Discussion? discussionOf(String projectId) =>
+      projectId == perfumeDiscussion.projectId ? perfumeDiscussion : null;
 
   // ---- المختبر -------------------------------------------------------------
 
   /// المؤشرات الأربعة ثوابت مستقلة: لا تُحسب من الجلسة المختارة.
-  static const LabStats labMetrics = LabStats(
+  static const LabStats labStats = LabStats(
     totalTests: 12,
     averageScore: 87,
     simulationCostHalalas: 1860,
@@ -317,27 +315,28 @@ abstract final class MockData {
   ];
 
   /// ثلاث جلسات مقيَّمة. الأولى مختارة افتراضياً؛ متوسطها 87 مصادفة بيانات.
+  /// المُنشئ غير const، فالقائمة final.
   static final List<Evaluation> evaluations = [
     Evaluation(
       id: 'e-perfume',
       projectId: 'p-perfume',
       title: 'جلسة متجر العطور الفاخرة',
-      whenLabel: 'اليوم',
-      scores: [90, 86, 84, 89, 86],
+      whenLabel: 'قبل ٣ ساعات',
+      scores: const [90, 86, 84, 89, 86],
     ),
     Evaluation(
       id: 'e-courts',
       projectId: 'p-courts',
       title: 'جلسة منصة حجز الملاعب',
       whenLabel: 'أمس',
-      scores: [94, 92, 90, 93, 91],
+      scores: const [94, 92, 90, 93, 91],
     ),
     Evaluation(
       id: 'e-study',
       projectId: 'p-study',
       title: 'جلسة مساعد المذاكرة',
-      whenLabel: 'قبل ٣ أيام',
-      scores: [82, 78, 74, 81, 80],
+      whenLabel: 'قبل يومين',
+      scores: const [82, 78, 74, 81, 80],
     ),
   ];
 
@@ -353,6 +352,7 @@ abstract final class MockData {
   // ---- الحساب والباقات -----------------------------------------------------
 
   /// العلاقة الملزمة الوحيدة: 740 + 260 = 1000 سنت.
+  /// userId وmemberSince وpoints بقيمها الافتراضية في Account.
   static const Account account = Account(
     displayName: 'عبدالله',
     currentPlanId: 'plan-regular',
@@ -378,10 +378,3 @@ abstract final class MockData {
     ),
     Plan(
       id: 'plan-top',
-      name: 'العليا',
-      priceCents: 20000,
-      badgeText: 'الأكثر تميزاً',
-      isFeatured: true,
-    ),
-  ];
-}

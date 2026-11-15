@@ -1,13 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../data/app_state.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/gold_button.dart';
-import '../widgets/member_avatar.dart';
+import '../widgets/member_icons.dart';
 import '../widgets/pentara_logo.dart';
 import '../widgets/project_card.dart';
 
@@ -40,18 +42,13 @@ const List<String> _months = [
 String greetingFor(DateTime d, String name) =>
     '${d.hour < 12 ? 'صباح' : 'مساء'} الخير، $name';
 
-/// تاريخ اليوم بالعربي بأرقام عربية (سرد): الخميس، ١٥ مايو ٢٠٢٥.
-/// DateTime.weekday يبدأ من 1 للاثنين.
+/// تاريخ اليوم بالعربي بأرقام عربية (سرد). DateTime.weekday يبدأ من 1 للاثنين.
 String arabicDateLabel(DateTime d) => toArabicDigits(
       '${_weekdays[d.weekday - 1]}، ${d.day} ${_months[d.month - 1]} ${d.year}',
     );
 
-/// الرئيسية. لا تقرأ AppState: الغلاف يملك الاختيار وتبديل التبويب
-/// والتنبيهات، فلا توقظها نبضات المحاكاة.
-///
-/// التحية والتاريخ من ساعة الجوال. تُحدَّثان عند العودة من الخلفية وبمؤقّت
-/// واحد غير متكرر عند الحد التالي (الظهر أو منتصف الليل). [clock] اختياري
-/// لحقن الوقت في الاختبار ولا يلزم تمريره.
+/// الرئيسية. التحية والتاريخ من ساعة الجوال، وتُحدَّثان عند العودة من
+/// الخلفية وبمؤقّت واحد غير متكرر عند الحد التالي (الظهر أو منتصف الليل).
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -61,14 +58,9 @@ class HomeScreen extends StatefulWidget {
     this.clock,
   });
 
-  /// «مشروع جديد»: يفتح السيناريو التجريبي المُعدّ مسبقاً.
   final VoidCallback onNewProject;
-
-  /// يستقبل معرّف المشروع.
   final ValueChanged<String> onOpenProject;
-
   final VoidCallback onNotifications;
-
   final DateTime Function()? clock;
 
   @override
@@ -92,8 +84,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _schedule(now);
   }
 
-  /// قراءة واحدة للوقت تُشتق منها التحية والتاريخ معاً.
-  /// لا setState إلا إذا تغيّر أحد النصين فعلاً.
   void _sync() {
     if (!mounted) return;
     final now = _read();
@@ -108,8 +98,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _schedule(now);
   }
 
-  /// مؤقّت واحد للحد التالي: 12:00 إن كنا قبله، وإلا منتصف الليل.
-  /// DateTime(y, m, d + 1) يتجاوز نهاية الشهر والسنة تلقائياً.
   void _schedule(DateTime now) {
     _timer?.cancel();
     final next = now.hour < 12
@@ -149,13 +137,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (p != null) recent.add(p);
     }
 
-    // الحشو العلوي 72 من أعلى المنطقة الآمنة (الغلاف يوفّر SafeArea).
+    // الحشو العلوي 16 تحت SafeArea التي يوفّرها الغلاف (بلا SafeArea ثانية).
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 72, 24, 24),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ---- الرأس: الشعار وزر الإشعارات
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -170,8 +157,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
           const SizedBox(height: 24),
-
-          // ---- التحية والتاريخ (من ساعة الجوال)
           Text(
             _greeting,
             style: AppTypography.displayL.copyWith(color: c.ink),
@@ -183,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 24),
 
-          // ---- الزر الكبير
+          // بعرض الشاشة كاملاً ناقص حاشية 24 (حشو الشاشة نفسه).
           SizedBox(
             width: double.infinity,
             child: GoldButton.primary(
@@ -202,50 +187,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const _LastSessionBadge(),
           const SizedBox(height: 24),
 
-          // ---- أعضاء الطاولة: القائمة بلا عكس، فيبدأ RTL بالرئيس من اليمين
-          // وينتهي بالمدقق. لقب الرئيس «الرئيس» عرضاً فقط.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (final m in MockData.members)
-                  SizedBox(
-                    width: 92,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        MemberAvatar(member: m, size: 64),
-                        const SizedBox(height: 4),
-                        ExcludeSemantics(
-                          child: Text(
-                            m.id == MemberId.chair ? 'الرئيس' : m.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: AppTypography.label
-                                .copyWith(color: c.memberName(m.id)),
-                          ),
-                        ),
-                        ExcludeSemantics(
-                          child: Text(
-                            m.role,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: AppTypography.caption
-                                .copyWith(color: c.inkMuted),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          // يتبع membersLayout. هذا الويدجت وحده يعتمد على AppState، فتبقى
+          // التحية وآخر المشاريع خارج إعادة البناء عند نبضات المحاكاة.
+          const _MembersSection(),
           const SizedBox(height: 24),
 
-          // ---- آخر المشاريع (ثلاثة معرّفات ثابتة، لا take(3))
           Text(
             'آخر المشاريع',
             style: AppTypography.title.copyWith(color: c.ink),
@@ -265,9 +211,235 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 }
 
+// ---------------------------------------------------------------------------
+// أعضاء الطاولة
+// ---------------------------------------------------------------------------
+
+/// يعرض الأعضاء حسب membersLayout. الأقراص بعتامة كاملة هنا: صف عرض بلا
+/// متحدث حالي، وشفافية 0.85 لغير المتحدث تخص الطاولة فقط.
+/// القائمة بلا عكس: RTL يضع الرئيس يميناً والمدقق يساراً.
+class _MembersSection extends StatelessWidget {
+  const _MembersSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = AppStateScope.of(context).membersLayout;
+    final members = MockData.members;
+
+    switch (layout) {
+      case MembersLayout.row:
+        return _RowLayout(members: members);
+      case MembersLayout.grid4:
+        return _Grid4Layout(members: members);
+      case MembersLayout.table:
+        return _TableLayout(members: members);
+    }
+  }
+}
+
+/// قرص 44 مرئي فعلاً (MemberAvatar(size: 44) يرسم نحو 29)، ولقب 12 بلونه.
+class _MemberCell extends StatelessWidget {
+  const _MemberCell({required this.member});
+
+  final Member member;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final label = member.id == MemberId.chair ? 'الرئيس' : member.title;
+    return Semantics(
+      label: '${member.title}، ${member.role}',
+      excludeSemantics: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: member.palette.disc,
+            ),
+            child: MemberIcon(
+              symbol: member.symbol,
+              size: 22,
+              color: const Color(0xFFFFFFFF),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AppTypography.caption.copyWith(color: c.memberName(member.id)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// صف واحد: ستة Expanded. حد المحتوى 6×44 = 264 (يلزم شاشة بعرض 312 مع
+/// الحاشية). تحت ذلك يُمرَّر أفقياً بعرض أدنى 264 دون تصغير الأقراص.
+class _RowLayout extends StatelessWidget {
+  const _RowLayout({required this.members});
+
+  final List<Member> members;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final row = Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final m in members)
+              Expanded(child: Center(child: _MemberCell(member: m))),
+          ],
+        );
+        if (box.maxWidth >= 264) return row;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(width: 264, child: row),
+        );
+      },
+    );
+  }
+}
+
+/// أربعة في الصف الأول، واثنان متوسَّطان تحتها بفجوة 8.
+class _Grid4Layout extends StatelessWidget {
+  const _Grid4Layout({required this.members});
+
+  final List<Member> members;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 8.0;
+        final cellW = ((box.maxWidth - 3 * gap) / 4).clamp(44.0, 200.0);
+
+        Widget cell(Member m) =>
+            SizedBox(width: cellW, child: Center(child: _MemberCell(member: m)));
+
+        final first = members.take(4).toList();
+        final second = members.skip(4).toList();
+
+        return Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < first.length; i++) ...[
+                  if (i > 0) const SizedBox(width: gap),
+                  cell(first[i]),
+                ],
+              ],
+            ),
+            const SizedBox(height: gap),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < second.length; i++) ...[
+                  if (i > 0) const SizedBox(width: gap),
+                  cell(second[i]),
+                ],
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// دائرة مصغّرة داخل مربع 200×200 (لا يتجاوز قيد الأب): الرئيس أعلاها ثم مع
+/// عقارب الساعة بالهوية الثابتة. الألقاب مقيّدة داخل المربع مع ellipsis؛
+/// عند تكبير الخط قد يُقصّ اللقب ولا يُكبَّر المربع.
+class _TableLayout extends StatelessWidget {
+  const _TableLayout({required this.members});
+
+  final List<Member> members;
+
+  static const List<MemberId> _order = [
+    MemberId.chair,
+    MemberId.engineer,
+    MemberId.practical,
+    MemberId.analyst,
+    MemberId.challenger,
+    MemberId.auditor,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final side = math.min(box.maxWidth, 200.0);
+        final cx = side / 2;
+        final cy = side / 2;
+        const cellW = 56.0;
+        const cellH = 64.0;
+        const r = 58.0;
+
+        final children = <Widget>[
+          Positioned(
+            left: cx - r,
+            top: cy - r,
+            width: r * 2,
+            height: r * 2,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: c.surfaceSoft,
+                border: Border.all(color: c.border, width: 1),
+              ),
+            ),
+          ),
+        ];
+
+        for (var i = 0; i < _order.length; i++) {
+          Member? m;
+          for (final x in members) {
+            if (x.id == _order[i]) m = x;
+          }
+          if (m == null) continue;
+          final theta = -math.pi / 2 + i * math.pi / 3;
+          final left = (cx + r * math.cos(theta) - cellW / 2)
+              .clamp(0.0, math.max(0.0, side - cellW))
+              .toDouble();
+          final top = (cy + r * math.sin(theta) - 22)
+              .clamp(0.0, math.max(0.0, side - cellH))
+              .toDouble();
+          children.add(
+            Positioned(
+              left: left,
+              top: top,
+              width: cellW,
+              child: _MemberCell(member: m),
+            ),
+          );
+        }
+
+        return Center(
+          child: SizedBox(
+            width: side,
+            height: side,
+            child: Stack(clipBehavior: Clip.none, children: children),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// شارة «آخر جلسة: $0.42»: نصّان منفصلان حتى لا تبعثر خوارزمية الاتجاه
-/// الثنائي علامة $. الرقم داخل LTR بخط Alexandria متساوي العرض.
-/// ثابت عرض مستقل، وليس تكلفة بطاقة.
+/// الثنائي علامة $. ثابت عرض مستقل، وليس تكلفة بطاقة.
 class _LastSessionBadge extends StatelessWidget {
   const _LastSessionBadge();
 
@@ -337,7 +509,6 @@ class _BellPainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..isAntiAlias = true;
 
-    // جسم الجرس.
     final body = Path()
       ..moveTo(4.5, 17)
       ..cubicTo(6.3, 15.4, 7, 13.8, 7, 10.5)
@@ -346,11 +517,8 @@ class _BellPainter extends CustomPainter {
       ..cubicTo(17, 13.8, 17.7, 15.4, 19.5, 17)
       ..close();
     canvas.drawPath(body, fill);
-
-    // المقبض العلوي.
     canvas.drawCircle(const Offset(12, 4.2), 1.6, fill);
 
-    // اللسان: نصف قرص سفلي.
     final clapper = Path()
       ..moveTo(9.7, 18.6)
       ..arcToPoint(
