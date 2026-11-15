@@ -8,11 +8,17 @@ import 'data/models.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_typography.dart';
+import 'widgets/bottom_nav.dart';
+import 'widgets/gold_button.dart';
+import 'widgets/member_avatar.dart';
+import 'widgets/member_icons.dart';
+import 'widgets/pentara_logo.dart';
+import 'widgets/status_chip.dart';
 
 /// جذر تطبيق بنتارا.
 ///
 /// ينشئ [AppState] مرة واحدة ويتخلّص منه. يستمع لتغيّر المظهر وحده قبل
-/// setState، فلا تعيد نبضات المحاكاة بناء MaterialApp. وتُحقن الحالة داخل
+/// setState، فلا تعيد نبضات المحاكاة بناء MaterialApp عند كل خطوة. وتُحقن الحالة داخل
 /// builder فتراها كل المسارات.
 class PentaraApp extends StatefulWidget {
   const PentaraApp({super.key});
@@ -71,9 +77,12 @@ class _PentaraAppState extends State<PentaraApp> {
   }
 }
 
-/// أسماء التبويبات بالترتيب من اليمين (الفهرس 0 = الرئيسية).
-/// RTL يضع العنصر الأول في أقصى اليمين تلقائياً، بلا عكس يدوي.
-const List<String> _tabLabels = [
+const int _homeTabIndex = 0;
+const int _tableTabIndex = 1;
+const int _accountTabIndex = 4;
+
+/// أسماء التبويبات المؤقتة بالترتيب من اليمين (الفهرس 0 = الرئيسية).
+const List<String> _tabTitles = [
   'الرئيسية',
   'الطاولة',
   'المشاريع',
@@ -81,12 +90,11 @@ const List<String> _tabLabels = [
   'حسابي',
 ];
 
-const int _tableTabIndex = 1;
-const int _accountTabIndex = 4;
-
 /// غلاف التنقل: يملك فهرس التبويب ويراقب دورة حياة التطبيق، ويبلّغ
 /// [AppState] بظهور الطاولة فقط: ظهور التبويب والتطبيق في المقدمة شرطان.
-// TODO(batch-3): يُستبدل بالهيكل الحقيقي مع bottom_nav.dart والشاشات.
+/// كل تبويب يُلفّ بـ TickerMode فلا يستمر نبض الأقراص في التبويبات المخفية
+/// (IndexedStack يُبقيها مركّبة).
+// TODO(batch-4): تُستبدل الشاشات المؤقتة بشاشات lib/screens/.
 class _Shell extends StatefulWidget {
   const _Shell();
 
@@ -134,6 +142,15 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  Widget _screen(int i) {
+    return switch (i) {
+      _homeTabIndex => const _TempHome(),
+      _tableTabIndex => const _TempTable(),
+      _accountTabIndex => const _TempAccount(),
+      _ => _TempTitleOnly(title: _tabTitles[i]),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -157,52 +174,86 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
           child: IndexedStack(
             index: _index,
             children: [
-              for (var i = 0; i < _tabLabels.length; i++)
-                _PlaceholderScreen(
-                  title: _tabLabels[i],
-                  extra: switch (i) {
-                    _tableTabIndex => const _TempTableStatus(),
-                    _accountTabIndex => const _TempThemeToggle(),
-                    _ => null,
-                  },
+              for (var i = 0; i < _tabTitles.length; i++)
+                TickerMode(
+                  enabled: i == _index,
+                  child: _screen(i),
                 ),
             ],
           ),
         ),
-        bottomNavigationBar: _TempBottomBar(
-          index: _index,
-          onSelect: _select,
+        // SafeArea السفلية داخل BottomNav مرة واحدة.
+        bottomNavigationBar: BottomNav(
+          currentIndex: _index,
+          onTap: _select,
         ),
       ),
     );
   }
 }
 
-// TODO(batch-3): تُستبدل بشاشات lib/screens/.
-class _PlaceholderScreen extends StatelessWidget {
-  const _PlaceholderScreen({required this.title, this.extra});
+// ---------------------------------------------------------------------------
+// شاشات مؤقتة تُستبدل في الدفعات التالية
+// ---------------------------------------------------------------------------
+
+class _TempTitleOnly extends StatelessWidget {
+  const _TempTitleOnly({required this.title});
 
   final String title;
-  final Widget? extra;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
+    return Center(
+      child: Text(
+        title,
+        textAlign: TextAlign.center,
+        style: AppTypography.title.copyWith(color: c.ink),
+      ),
+    );
+  }
+}
+
+// TODO(batch-4): يُستبدل بـ home_screen.dart.
+class _TempHome extends StatelessWidget {
+  const _TempHome();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            const PentaraLogo(markSize: 56),
+            const SizedBox(height: 24),
             Text(
-              title,
+              MockData.homeGreeting,
               textAlign: TextAlign.center,
               style: AppTypography.title.copyWith(color: c.ink),
             ),
-            if (extra != null) ...[
-              const SizedBox(height: 24),
-              extra!,
-            ],
+            const SizedBox(height: 4),
+            Text(
+              MockData.homeDateLabel,
+              textAlign: TextAlign.center,
+              style: AppTypography.label.copyWith(color: c.inkMuted),
+            ),
+            const SizedBox(height: 24),
+            GoldButton.primary(label: 'مشروع جديد', onTap: () {}),
+            const SizedBox(height: 12),
+            StatusChip.tag(label: MockData.lastSessionBadge),
+            const SizedBox(height: 24),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final m in MockData.members)
+                  MemberAvatar(member: m, size: 52),
+              ],
+            ),
           ],
         ),
       ),
@@ -211,10 +262,10 @@ class _PlaceholderScreen extends StatelessWidget {
 }
 
 /// عرض مؤقت لحالة المحاكاة للتحقق من الطبقة. يعتمد على AppState
-/// وحده من بين العناصر المؤقتة، فيُعاد بناؤه مع كل نبضة دون غيره.
-// TODO(batch-3): يُحذف مع بناء table_screen.dart.
-class _TempTableStatus extends StatelessWidget {
-  const _TempTableStatus();
+/// وحده، فيُعاد بناؤه مع كل نبضة دون غيره.
+// TODO(batch-4): يُحذف مع بناء table_screen.dart.
+class _TempTable extends StatelessWidget {
+  const _TempTable();
 
   @override
   Widget build(BuildContext context) {
@@ -222,94 +273,106 @@ class _TempTableStatus extends StatelessWidget {
     final app = AppStateScope.of(context);
     final project = app.activeProject;
     final speakerId = app.centerMemberId;
-    final speaker =
-        speakerId == null ? 'لا يوجد' : MockData.memberOf(speakerId).title;
+    final speaker = speakerId == null ? null : MockData.memberOf(speakerId);
 
-    final lines = <String>[
-      project?.name ?? '',
-      'المتحدث: $speaker',
-      toArabicDigits(
-        'الجولة ${app.currentRound} — الرسائل ${app.cursor} من ${app.messageCount}',
-      ),
-      app.summaryVisible
-          ? 'الخلاصة ظاهرة'
-          : (app.isRunning ? 'المحاكاة تعمل' : 'المحاكاة متوقفة'),
-    ];
+    final status = app.summaryVisible
+        ? 'الخلاصة ظاهرة'
+        : (app.isRunning ? 'المحاكاة تعمل' : 'المحاكاة متوقفة');
 
-    return Container(
-      constraints: const BoxConstraints(minHeight: 44),
-      padding: const EdgeInsets.all(16),
-      decoration: ShapeDecoration(
-        color: c.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: c.border),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final line in lines)
-            Text(
-              line,
-              textAlign: TextAlign.center,
-              style: AppTypography.label.copyWith(color: c.inkMuted),
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.all(16),
+          decoration: ShapeDecoration(
+            color: c.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: c.border),
             ),
-          const SizedBox(height: 12),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _TempAction(label: 'إعادة', onTap: app.restartSimulation),
-              _TempAction(label: 'الخلاصة', onTap: app.jumpToSummary),
-              _TempAction(label: 'حفظ', onTap: app.saveSummary),
+              Text(
+                project?.name ?? '',
+                textAlign: TextAlign.center,
+                style: AppTypography.title.copyWith(color: c.ink),
+              ),
+              const SizedBox(height: 12),
+              if (speaker != null) ...[
+                MemberAvatar(
+                  member: speaker,
+                  size: 64,
+                  isSpeaking: app.isRunning,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    MemberIcon(
+                      symbol: speaker.symbol,
+                      size: 18,
+                      color: c.memberName(speaker.id),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      speaker.title,
+                      style: AppTypography.bodyStrong
+                          .copyWith(color: c.memberName(speaker.id)),
+                    ),
+                  ],
+                ),
+              ] else
+                Text(
+                  'لا يوجد متحدث',
+                  style: AppTypography.label.copyWith(color: c.inkMuted),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                toArabicDigits(
+                  'الجولة ${app.currentRound} — الرسائل ${app.cursor} من ${app.messageCount}',
+                ),
+                textAlign: TextAlign.center,
+                style: AppTypography.label.copyWith(color: c.inkMuted),
+              ),
+              Text(
+                status,
+                textAlign: TextAlign.center,
+                style: AppTypography.label.copyWith(color: c.inkMuted),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  GoldButton.secondary(
+                    label: 'إعادة',
+                    onTap: app.restartSimulation,
+                  ),
+                  GoldButton.secondary(
+                    label: 'الخلاصة',
+                    onTap: app.jumpToSummary,
+                  ),
+                  GoldButton.secondary(
+                    label: 'حفظ',
+                    onTap: app.saveSummary,
+                  ),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TempAction extends StatelessWidget {
-  const _TempAction({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const StadiumBorder(),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          alignment: Alignment.center,
-          decoration: ShapeDecoration(
-            shape: StadiumBorder(side: BorderSide(color: c.border)),
-          ),
-          child: Text(
-            label,
-            style: AppTypography.label.copyWith(color: c.ink),
-          ),
         ),
       ),
     );
   }
 }
 
-/// زر مؤقت لتبديل المظهر. InkWell ونص بلون ink، لا TextButton،
-/// حتى لا يرث لون ColorScheme.primary.
-// TODO(batch-3): يُستبدل بزر المظهر الحقيقي في account_screen.dart.
-class _TempThemeToggle extends StatelessWidget {
-  const _TempThemeToggle();
+// TODO(batch-4): يُستبدل بزر المظهر الحقيقي في account_screen.dart.
+class _TempAccount extends StatelessWidget {
+  const _TempAccount();
 
   @override
   Widget build(BuildContext context) {
@@ -318,127 +381,23 @@ class _TempThemeToggle extends StatelessWidget {
     final label =
         isDark ? 'التبديل إلى الوضع الفاتح' : 'التبديل إلى الوضع الداكن';
 
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: AppStateScope.read(context).toggleTheme,
-        customBorder: const StadiumBorder(),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: ShapeDecoration(
-            color: c.surface,
-            shape: StadiumBorder(side: BorderSide(color: c.goldLine)),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: AppTypography.label.copyWith(color: c.ink),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// شريط تنقل سفلي مؤقت: نص ونقطة ذهبية تحت التبويب النشط.
-/// surface وحد علوي border، بلا ظل.
-// TODO(batch-3): يُستبدل بـ lib/widgets/bottom_nav.dart برموز CustomPainter.
-class _TempBottomBar extends StatelessWidget {
-  const _TempBottomBar({required this.index, required this.onSelect});
-
-  final int index;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border(top: BorderSide(color: c.border, width: 1)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 64,
-          child: Row(
-            children: [
-              for (var i = 0; i < _tabLabels.length; i++)
-                Expanded(
-                  child: _TempNavItem(
-                    label: _tabLabels[i],
-                    selected: i == index,
-                    onTap: () => onSelect(i),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TempNavItem extends StatelessWidget {
-  const _TempNavItem({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    const duration = Duration(milliseconds: 300);
-    const curve = Curves.easeOutCubic;
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedDefaultTextStyle(
-                duration: duration,
-                curve: curve,
-                style: AppTypography.label.copyWith(
-                  color: selected ? c.goldText : c.inkMuted,
-                ),
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(height: 4),
-              AnimatedContainer(
-                duration: duration,
-                curve: curve,
-                width: selected ? 6 : 0,
-                height: 6,
-                decoration: BoxDecoration(
-                  // gold500 تعبئة لا نص، فيصح استخدامه هنا.
-                  color: AppColors.gold500,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ],
-          ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'حسابي',
+              textAlign: TextAlign.center,
+              style: AppTypography.title.copyWith(color: c.ink),
+            ),
+            const SizedBox(height: 24),
+            GoldButton.secondary(
+              label: label,
+              onTap: AppStateScope.read(context).toggleTheme,
+            ),
+          ],
         ),
       ),
     );
