@@ -98,6 +98,7 @@ class _NavItem extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 72),
           child: Center(
+            heightFactor: 1,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
               child: Column(
