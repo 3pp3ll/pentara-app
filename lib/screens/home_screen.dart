@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/mock_data.dart';
@@ -9,14 +11,54 @@ import '../widgets/member_avatar.dart';
 import '../widgets/pentara_logo.dart';
 import '../widgets/project_card.dart';
 
+const List<String> _weekdays = [
+  'الاثنين',
+  'الثلاثاء',
+  'الأربعاء',
+  'الخميس',
+  'الجمعة',
+  'السبت',
+  'الأحد',
+];
+
+const List<String> _months = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+];
+
+/// التحية حسب الساعة: قبل 12 «صباح الخير»، ومن 12 «مساء الخير».
+String greetingFor(DateTime d, String name) =>
+    '${d.hour < 12 ? 'صباح' : 'مساء'} الخير، $name';
+
+/// تاريخ اليوم بالعربي بأرقام عربية (سرد): الخميس، ١٥ مايو ٢٠٢٥.
+/// DateTime.weekday يبدأ من 1 للاثنين.
+String arabicDateLabel(DateTime d) => toArabicDigits(
+      '${_weekdays[d.weekday - 1]}، ${d.day} ${_months[d.month - 1]} ${d.year}',
+    );
+
 /// الرئيسية. لا تقرأ AppState: الغلاف يملك الاختيار وتبديل التبويب
 /// والتنبيهات، فلا توقظها نبضات المحاكاة.
-class HomeScreen extends StatelessWidget {
+///
+/// التحية والتاريخ من ساعة الجوال. تُحدَّثان عند العودة من الخلفية وبمؤقّت
+/// واحد غير متكرر عند الحد التالي (الظهر أو منتصف الليل). [clock] اختياري
+/// لحقن الوقت في الاختبار ولا يلزم تمريره.
+class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.onNewProject,
     required this.onOpenProject,
     required this.onNotifications,
+    this.clock,
   });
 
   /// «مشروع جديد»: يفتح السيناريو التجريبي المُعدّ مسبقاً.
@@ -26,6 +68,76 @@ class HomeScreen extends StatelessWidget {
   final ValueChanged<String> onOpenProject;
 
   final VoidCallback onNotifications;
+
+  final DateTime Function()? clock;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  late String _greeting;
+  late String _date;
+  Timer? _timer;
+
+  DateTime _read() => (widget.clock ?? DateTime.now)();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final now = _read();
+    _greeting = greetingFor(now, MockData.account.displayName);
+    _date = arabicDateLabel(now);
+    _schedule(now);
+  }
+
+  /// قراءة واحدة للوقت تُشتق منها التحية والتاريخ معاً.
+  /// لا setState إلا إذا تغيّر أحد النصين فعلاً.
+  void _sync() {
+    if (!mounted) return;
+    final now = _read();
+    final g = greetingFor(now, MockData.account.displayName);
+    final d = arabicDateLabel(now);
+    if (g != _greeting || d != _date) {
+      setState(() {
+        _greeting = g;
+        _date = d;
+      });
+    }
+    _schedule(now);
+  }
+
+  /// مؤقّت واحد للحد التالي: 12:00 إن كنا قبله، وإلا منتصف الليل.
+  /// DateTime(y, m, d + 1) يتجاوز نهاية الشهر والسنة تلقائياً.
+  void _schedule(DateTime now) {
+    _timer?.cancel();
+    final next = now.hour < 12
+        ? DateTime(now.year, now.month, now.day, 12)
+        : DateTime(now.year, now.month, now.day + 1);
+    final diff = next.difference(now);
+    final delay = diff.isNegative
+        ? const Duration(seconds: 1)
+        : diff + const Duration(seconds: 1);
+    _timer = Timer(delay, _sync);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _sync();
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,8 +149,9 @@ class HomeScreen extends StatelessWidget {
       if (p != null) recent.add(p);
     }
 
+    // الحشو العلوي 72 من أعلى المنطقة الآمنة (الغلاف يوفّر SafeArea).
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(24, 72, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -51,21 +164,21 @@ class HomeScreen extends StatelessWidget {
               GoldButton.disc(
                 label: 'الإشعارات',
                 filled: true,
-                onTap: onNotifications,
+                onTap: widget.onNotifications,
                 icon: const _BellIcon(color: AppColors.onGold),
               ),
             ],
           ),
           const SizedBox(height: 24),
 
-          // ---- التحية والتاريخ (ثابتان)
+          // ---- التحية والتاريخ (من ساعة الجوال)
           Text(
-            MockData.homeGreeting,
+            _greeting,
             style: AppTypography.displayL.copyWith(color: c.ink),
           ),
           const SizedBox(height: 4),
           Text(
-            MockData.homeDateLabel,
+            _date,
             style: AppTypography.label.copyWith(color: c.inkMuted),
           ),
           const SizedBox(height: 24),
@@ -76,7 +189,7 @@ class HomeScreen extends StatelessWidget {
             child: GoldButton.primary(
               label: 'مشروع جديد',
               expand: true,
-              onTap: onNewProject,
+              onTap: widget.onNewProject,
               icon: const _PlusIcon(color: AppColors.onGold),
             ),
           ),
@@ -89,14 +202,16 @@ class HomeScreen extends StatelessWidget {
           const _LastSessionBadge(),
           const SizedBox(height: 24),
 
-          // ---- أعضاء الطاولة
+          // ---- أعضاء الطاولة: القائمة بلا عكس، فيبدأ RTL بالرئيس من اليمين
+          // وينتهي بالمدقق. لقب الرئيس «الرئيس» عرضاً فقط.
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final m in MockData.members)
                   SizedBox(
-                    width: 84,
+                    width: 92,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -104,8 +219,18 @@ class HomeScreen extends StatelessWidget {
                         const SizedBox(height: 4),
                         ExcludeSemantics(
                           child: Text(
-                            m.title,
+                            m.id == MemberId.chair ? 'الرئيس' : m.title,
                             maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: AppTypography.label
+                                .copyWith(color: c.memberName(m.id)),
+                          ),
+                        ),
+                        ExcludeSemantics(
+                          child: Text(
+                            m.role,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
                             style: AppTypography.caption
@@ -131,7 +256,7 @@ class HomeScreen extends StatelessWidget {
             ProjectCard(
               project: recent[i],
               showDetails: false,
-              onTap: () => onOpenProject(recent[i].id),
+              onTap: () => widget.onOpenProject(recent[i].id),
             ),
           ],
         ],
