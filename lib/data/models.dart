@@ -49,6 +49,10 @@ String formatThousands(int value) {
   return value < 0 ? '-$buffer' : buffer.toString();
 }
 
+/// شكل صف الأعضاء في الرئيسية؛ يُختار من لوحة التحكم.
+/// row: صف واحد، grid4: أربعة ثم اثنان، table: دائرة مصغّرة.
+enum MembersLayout { row, grid4, table }
+
 /// معرّف المالك الثابت.
 const String ownerUserId = '10000000';
 

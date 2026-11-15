@@ -378,3 +378,10 @@ abstract final class MockData {
     ),
     Plan(
       id: 'plan-top',
+      name: 'العليا',
+      priceCents: 20000,
+      badgeText: 'الأكثر تميزاً',
+      isFeatured: true,
+    ),
+  ];
+}
