@@ -9,6 +9,8 @@ import '../theme/app_typography.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'admin_screen.dart';
 import '../live/live_account_card.dart';
+import '../live/live_api.dart';
+import '../widgets/share_card.dart';
 
 /// حسابي: عرض فقط (بلا دفع ولا فتح روابط). بطاقة المستخدم كحلية من ألوان
 /// الوضع الداكن في الوضعين.
@@ -40,13 +42,26 @@ class AccountScreen extends StatelessWidget {
                       account.displayName,
                       style: AppTypography.title.copyWith(color: c.ink),
                     ),
-                    Directionality(
-                      textDirection: TextDirection.ltr,
-                      child: Text(
-                        'ID ${app.userId}',
-                        style: latinFigures(AppTypography.caption)
-                            .copyWith(color: c.inkMuted),
-                      ),
+                    // رقم الحساب الحقيقي يظهر بعد إنشاء الحساب فقط.
+                    ListenableBuilder(
+                      listenable: LiveController.instance,
+                      builder: (context, _) {
+                        final id = LiveController.instance.user?.id;
+                        if (id == null) {
+                          return Text(
+                            'لم يُنشأ الحساب بعد',
+                            style: AppTypography.caption.copyWith(color: c.inkMuted),
+                          );
+                        }
+                        return Directionality(
+                          textDirection: TextDirection.ltr,
+                          child: Text(
+                            'ID $id',
+                            style: latinFigures(AppTypography.caption)
+                                .copyWith(color: c.inkMuted),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -60,31 +75,44 @@ class AccountScreen extends StatelessWidget {
           const LiveAccountCard(),
           const SizedBox(height: 16),
 
-          // ---- بطاقة المستخدم
-          _UserCard(
-            name: account.displayName,
-            userId: app.userId,
-            memberSince: app.memberSince,
-            points: app.points,
+          // ---- بطاقة المستخدم + نص الإحالة (النص يُدار من لوحة التحكم على الويب)
+          ListenableBuilder(
+            listenable: LiveController.instance,
+            builder: (context, _) {
+              final live = LiveController.instance;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // البطاقة وQR تظهر بعد إنشاء الحساب فقط (الرابط مبني على ID الحقيقي).
+                  if (live.user != null) ...[
+                    _UserCard(
+                      name: account.displayName,
+                      userId: live.user!.id,
+                      memberSince: app.memberSince,
+                      points: app.points,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (live.referVisible && live.referText.trim().isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: c.surfaceSoft,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: c.border, width: 1),
+                      ),
+                      child: Text(
+                        live.referText,
+                        style: AppTypography.body.copyWith(color: c.ink),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 16),
-
-          // ---- بطاقة الإحالة
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: c.surfaceSoft,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: c.border, width: 1),
-            ),
-            child: Text(
-              'ادعُ صديقاً: تحصل على \$5 من اشتراكه و500 نقطة، ويحصل هو على '
-              '100 نقطة. إن اشترك في الباقة العليا تحصل على \$10 و1500 نقطة.',
-              style: AppTypography.body.copyWith(color: c.ink),
-            ),
-          ),
-          const SizedBox(height: 16),
 
           // ---- رصيد النماذج
           _CreditCard(credit: credit),
@@ -306,6 +334,15 @@ class _UserCard extends StatelessWidget {
     const d = PentaraColors.dark;
     final url = 'https://3pp3ll.github.io/pentara-app/?ref=$userId';
 
+    return ShareableCard(
+      shareText: 'انضم إلى بنتارا: مجلس من أقوى نماذج الذكاء الاصطناعي يحوّل فكرتك '
+          'إلى مشروع متكامل. حمّل التطبيق من رابطي:\n$url',
+      fileName: 'pentara-$userId.png',
+      builder: (context, shareButton) => _card(d, url, shareButton),
+    );
+  }
+
+  Widget _card(PentaraColors d, String url, Widget shareButton) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -325,8 +362,14 @@ class _UserCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: AppTypography.title.copyWith(color: d.ink)),
-                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(name, style: AppTypography.title.copyWith(color: d.ink)),
+                    ),
+                    shareButton,
+                  ],
+                ),
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: Text(
