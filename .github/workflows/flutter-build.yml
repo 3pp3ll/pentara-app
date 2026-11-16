@@ -65,6 +65,12 @@ jobs:
             sed -i "s|<title>[^<]*</title>|<title>$L</title>|" web/index.html
           fi
 
+      - name: Internet permission (release)
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.INTERNET' "$M" || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' "$M"
+          grep -n 'INTERNET' "$M"
+
       - run: flutter pub get
 
       - name: Analyze
