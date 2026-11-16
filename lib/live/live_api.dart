@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// رابط سيرفر بنتارا (Cloudflare Worker). يُغيَّر هنا فقط.
-const String kServerUrl = 'https://pentara-api.SUBDOMAIN.workers.dev';
+const String kServerUrl = 'https://pentara-api.3pp3ll.workers.dev';
 
 class LiveException implements Exception {
   LiveException(this.message, [this.status = 0]);
@@ -72,6 +72,13 @@ class LiveController extends ChangeNotifier {
   static final LiveController instance = LiveController._();
 
   static const String _prefsKey = 'pentara-login';
+
+  /// نص الإحالة تحت بطاقة المستخدم: يُعدَّل ويُخفى من لوحة التحكم على الويب.
+  static const String defaultReferText =
+      'ادعُ صديقاً: تحصل على \$5 من اشتراكه و500 نقطة، ويحصل هو على 100 نقطة. '
+      'إن اشترك في الباقة العليا تحصل على \$10 و1500 نقطة.';
+  String referText = defaultReferText;
+  bool referVisible = true;
 
   String? _login;
   LiveUser? _user;
@@ -152,6 +159,17 @@ class LiveController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _login = prefs.getString(_prefsKey);
     } catch (_) {}
+    if (configured) {
+      try {
+        final data = await _send('GET', '/api/config', timeout: const Duration(seconds: 12));
+        final cfg = data['config'];
+        if (cfg is Map<String, dynamic>) {
+          final t = '${cfg['referText'] ?? ''}'.trim();
+          if (t.isNotEmpty) referText = t;
+          referVisible = cfg['referVisible'] != false;
+        }
+      } catch (_) {}
+    }
     if (_login != null && configured) {
       await _run(() async => _setUser(await _send('GET', '/api/me')));
     }
