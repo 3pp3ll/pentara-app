@@ -11,6 +11,7 @@ import '../widgets/project_card.dart' show latinFigures;
 import 'live_account_card.dart';
 import 'live_api.dart';
 import 'live_session.dart';
+import 'rich_text_view.dart';
 
 /// طاولة حقيقية: المستخدم يكتب فكرته، والأعضاء الخمسة يتناقشون فعلياً عبر
 /// السيرفر، ثم يكتب رئيس الجلسة الخلاصة.
@@ -303,7 +304,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             Text('تعذّر الرد: ${e.error}',
                 style: AppTypography.label.copyWith(color: const Color(0xFFA8322E)))
           else
-            SelectableText(e.text, style: AppTypography.body.copyWith(color: c.ink)),
+            RichTextView(e.text),
         ],
           ),
         ),
@@ -356,7 +357,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          SelectableText(_s.summary, style: AppTypography.body.copyWith(color: c.ink)),
+          RichTextView(_s.summary),
           if (_s.summaryCut) ...[
             const SizedBox(height: 8),
             Text('الخلاصة طويلة وقد تكون اختُصرت.',
