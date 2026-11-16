@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/app_state.dart';
-import 'data/mock_data.dart';
+import 'live/live_api.dart';
+import 'live/live_table_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/lab_screen.dart';
@@ -37,6 +38,7 @@ class _PentaraAppState extends State<PentaraApp> {
     _app = AppState(stepDuration: const Duration(milliseconds: 1200));
     _mode = _app.themeMode;
     _app.addListener(_onAppChanged);
+    LiveController.instance.init();
   }
 
   void _onAppChanged() {
@@ -153,11 +155,11 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     );
   }
 
-  /// «مشروع جديد»: يختار السيناريو التجريبي الافتراضي ويفتح الطاولة.
+  /// «مشروع جديد»: يفتح الطاولة الحقيقية (السيرفر). العرض التجريبي يبقى في تبويب الطاولة.
   void _newProject() {
-    _app?.selectProject(MockData.defaultProjectId);
-    _select(_tableTabIndex);
-    _notify('يُفتح السيناريو التجريبي المُعدّ مسبقاً');
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const LiveTableScreen()),
+    );
   }
 
   /// الضغط على بطاقة مشروع: يختار معرّفه ثم يفتح الطاولة.

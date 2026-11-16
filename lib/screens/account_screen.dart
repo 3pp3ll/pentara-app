@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'admin_screen.dart';
+import '../live/live_account_card.dart';
 
 /// حسابي: عرض فقط (بلا دفع ولا فتح روابط). بطاقة المستخدم كحلية من ألوان
 /// الوضع الداكن في الوضعين.
@@ -54,6 +55,10 @@ class AccountScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
+
+          // ---- الحساب الحقيقي: إنشاء، دخول، تفعيل كود المتجر
+          const LiveAccountCard(),
+          const SizedBox(height: 16),
 
           // ---- بطاقة المستخدم
           _UserCard(
