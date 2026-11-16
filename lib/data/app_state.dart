@@ -18,6 +18,9 @@ enum RoundProgress { done, active, pending }
 class AppState extends ChangeNotifier {
   AppState({this.stepDuration = const Duration(milliseconds: 900)}) {
     _cursor = _initialCursorFor(_activeProjectId);
+    // الترتيب مهم: المستخدمون أولاً لأن أرضية الرصيد تُحسب منهم.
+    _seedUsers();
+    _seedPlanLimits();
   }
 
   /// خطوة المحاكاة (ثابت نموذج أولي، لا علاقة له بمؤشر «42 ث»).
@@ -40,6 +43,9 @@ class AppState extends ChangeNotifier {
   String get memberSince => MockData.account.memberSince;
   int get points => MockData.account.points;
 
+  /// فحص واجهة لنموذج محلي بلا خادم: ليس تفويضاً أمنياً.
+  bool get isOwner => userId == ownerUserId;
+
   // ---- تخطيط صف الأعضاء في الرئيسية ----------------------------------------
 
   MembersLayout _membersLayout = MembersLayout.row;
@@ -49,6 +55,161 @@ class AppState extends ChangeNotifier {
     if (value == _membersLayout) return;
     _membersLayout = value;
     notifyListeners();
+  }
+
+  // ---- لوحة التحكم: حدود الباقات واسم التطبيق والمستخدمون -------------------
+
+  /// القيم الابتدائية بالموضع (عادية/ماكس/العليا). إعدادات تجريبية لا استحقاق
+  /// تجاري. أي باقة زائدة تأخذ [_seedProjectsFallback].
+  static const List<int> _seedProjects = [20, 50, 100];
+  static const int _seedProjectsFallback = 100;
+  static const int _seedCreditCents = 1000;
+
+  /// الاسمان المسموحان فقط لاسم التطبيق.
+  static const List<String> allowedAppNames = ['بنتارا', 'Pentara AI'];
+
+  final Map<String, PlanLimits> _planLimits = {};
+  final List<AdminUser> _users = [];
+  String _appName = 'بنتارا';
+
+  Map<String, PlanLimits> get planLimits => Map.unmodifiable(_planLimits);
+
+  /// null لمعرّف مجهول.
+  PlanLimits? planLimitsOf(String planId) => _planLimits[planId];
+
+  List<AdminUser> get users => List.unmodifiable(_users);
+
+  String get appName => _appName;
+
+  /// يرفض أي قيمة غير الاسمين المسموحين، ولا ينبّه عند التطابق.
+  set appName(String value) {
+    if (!allowedAppNames.contains(value)) return;
+    if (value == _appName) return;
+    _appName = value;
+    notifyListeners();
+  }
+
+  /// أدنى حد رصيد مسموح (بالدولار) لباقة: أعلى استهلاك مسجّل لمستخدميها
+  /// (مفعّلين أو موقوفين) مرفوعاً لمضاعف الخطوة، وبحد أدنى [PlanLimits.minCreditUsd].
+  /// تعيد null إن تجاوز الاستهلاك [PlanLimits.maxCreditUsd]: لا يمكن تمثيله
+  /// ضمن المدى فيُعطَّل التعديل. تُحسب لحظياً من قائمة المستخدمين.
+  int? creditFloorUsd(String planId) {
+    var maxConsumed = 0;
+    for (final u in _users) {
+      if (u.planId == planId && u.consumedCents > maxConsumed) {
+        maxConsumed = u.consumedCents;
+      }
+    }
+    const stepCents = PlanLimits.creditStepUsd * 100;
+    const minCents = PlanLimits.minCreditUsd * 100;
+    final rounded = ((maxConsumed + stepCents - 1) ~/ stepCents) * stepCents;
+    final floorCents = rounded < minCents ? minCents : rounded;
+    if (floorCents > PlanLimits.maxCreditUsd * 100) return null;
+    return floorCents ~/ 100;
+  }
+
+  /// عدد المشاريع الشهرية: تقريب لأقرب خطوة ثم قصّ ثم مقارنة قبل النبض.
+  void setPlanMonthlyProjects(String planId, num raw) {
+    final cur = _planLimits[planId];
+    if (cur == null) return; // معرّف مجهول: لا أثر.
+    if (!raw.isFinite) return;
+    final snapped = (raw / PlanLimits.projectStep).round() * PlanLimits.projectStep;
+    final value = snapped
+        .clamp(PlanLimits.minProjects, PlanLimits.maxProjects)
+        .toInt();
+    if (value == cur.monthlyProjects) return;
+    _planLimits[planId] = cur.copyWith(monthlyProjects: value);
+    notifyListeners();
+  }
+
+  /// حد الرصيد بالدولار (قيمة المنزلق double): round() صريح، تثبيت على الخطوة،
+  /// قصّ بالأرضية، ثم التحويل لسنتات كعدد صحيح. معطّل إن لم تُمثَّل الأرضية.
+  void setPlanCreditLimitUsd(String planId, num raw) {
+    final cur = _planLimits[planId];
+    if (cur == null) return;
+    if (!raw.isFinite) return;
+    final floor = creditFloorUsd(planId);
+    if (floor == null) return; // الأرضية فوق المدى: لا clamp بحد معكوس.
+    final snapped =
+        (raw / PlanLimits.creditStepUsd).round() * PlanLimits.creditStepUsd;
+    final usd = snapped.clamp(floor, PlanLimits.maxCreditUsd).toInt();
+    final cents = usd * 100;
+    if (cents == cur.creditLimitCents) return;
+    _planLimits[planId] = cur.copyWith(creditLimitCents: cents);
+    notifyListeners();
+  }
+
+  /// المالك لا يُوقَف حتى برمجياً. معرّف مجهول أو قيمة مطابقة: بلا نبض.
+  void setUserActive(String id, bool value) {
+    if (id == ownerUserId && !value) return;
+    final i = _users.indexWhere((u) => u.id == id);
+    if (i < 0 || _users[i].isActive == value) return;
+    _users[i] = _users[i].copyWith(isActive: value);
+    notifyListeners();
+  }
+
+  String _seedPlanId(int index) {
+    final plans = MockData.plans;
+    if (plans.isEmpty) return '';
+    return plans[index < plans.length ? index : plans.length - 1].id;
+  }
+
+  void _seedUsers() {
+    final acc = MockData.account;
+    _users
+      ..clear()
+      ..addAll([
+        // المالك من الحساب: الاسم والباقة والاستهلاك بلا قيم مثبّتة.
+        AdminUser(
+          id: ownerUserId,
+          name: acc.displayName,
+          planId: acc.currentPlanId,
+          consumedCents: acc.credit.consumedCents,
+        ),
+        // ثلاثة مستخدمين تجريبيين بمعرّفات ثابتة (لا توليد داخل build).
+        AdminUser(
+          id: '20481735',
+          name: 'مستخدم ٢',
+          planId: _seedPlanId(0),
+          consumedCents: 120,
+        ),
+        AdminUser(
+          id: '31960274',
+          name: 'مستخدم ٣',
+          planId: _seedPlanId(1),
+          consumedCents: 420,
+        ),
+        AdminUser(
+          id: '47705829',
+          name: 'مستخدم ٤',
+          planId: _seedPlanId(0),
+          consumedCents: 0,
+          isActive: false,
+        ),
+      ]);
+  }
+
+  void _seedPlanLimits() {
+    _planLimits.clear();
+    final plans = MockData.plans;
+    for (var i = 0; i < plans.length; i++) {
+      final id = plans[i].id;
+      if (_planLimits.containsKey(id)) continue;
+      final projects =
+          i < _seedProjects.length ? _seedProjects[i] : _seedProjectsFallback;
+      final floor = creditFloorUsd(id);
+      final int cents;
+      if (floor == null) {
+        cents = PlanLimits.maxCreditUsd * 100;
+      } else {
+        final floorCents = floor * 100;
+        cents = floorCents > _seedCreditCents ? floorCents : _seedCreditCents;
+      }
+      _planLimits[id] = PlanLimits(
+        monthlyProjects: projects,
+        creditLimitCents: cents,
+      );
+    }
   }
 
   // ---- المشروع النشط -------------------------------------------------------
@@ -247,7 +408,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _stop();
     super.dispose();
-  }
+    }
 }
 
 /// يمرّر [AppState] عبر InheritedNotifier.

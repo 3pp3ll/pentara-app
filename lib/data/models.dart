@@ -398,3 +398,77 @@ class Account {
   final String memberSince;
   final int points;
 }
+
+// ---------------------------------------------------------------------------
+// لوحة التحكم (الدفعة ٧): إعدادات إدارية تجريبية داخل الجلسة فقط
+// ---------------------------------------------------------------------------
+
+/// حدود باقة واحدة. غير قابلة للتعديل: التحديث باستبدال النسخة.
+/// قرارات اللمس: خطوة ٥ للمشاريع وللرصيد (قسم الشريط نحو ٧px، لا تسعيرة).
+class PlanLimits {
+  const PlanLimits({
+    required this.monthlyProjects,
+    required this.creditLimitCents,
+  });
+
+  static const int minProjects = 5;
+  static const int maxProjects = 100;
+  static const int projectStep = 5;
+
+  static const int minCreditUsd = 5;
+  static const int maxCreditUsd = 200;
+  static const int creditStepUsd = 5;
+
+  /// أقسام الشريطين مشتقة من الثوابت: ١٩ و٣٩.
+  static const int projectDivisions =
+      (maxProjects - minProjects) ~/ projectStep;
+  static const int creditDivisions =
+      (maxCreditUsd - minCreditUsd) ~/ creditStepUsd;
+
+  final int monthlyProjects;
+
+  /// سنتات صحيحة، متّسقة مع formatUsd وCreditBalance.
+  final int creditLimitCents;
+
+  int get creditLimitUsd => creditLimitCents ~/ 100;
+  String get creditLimitLabel => formatUsd(creditLimitCents);
+
+  PlanLimits copyWith({int? monthlyProjects, int? creditLimitCents}) {
+    return PlanLimits(
+      monthlyProjects: monthlyProjects ?? this.monthlyProjects,
+      creditLimitCents: creditLimitCents ?? this.creditLimitCents,
+    );
+  }
+}
+
+/// مستخدم تجريبي في لوحة التحكم. الباقة بمعرّفها لا باسمها المنسوخ.
+class AdminUser {
+  const AdminUser({
+    required this.id,
+    required this.name,
+    required this.planId,
+    required this.consumedCents,
+    this.isActive = true,
+  }) : assert(id.length == 8, 'المعرّف ثماني خانات');
+
+  final String id;
+  final String name;
+  final String planId;
+  final int consumedCents;
+  final bool isActive;
+
+  /// الـassert للتوثيق فقط؛ الحماية الفعلية داخل AppState.setUserActive.
+  bool get isOwner => id == ownerUserId;
+
+  String get consumedLabel => formatUsd(consumedCents);
+
+  AdminUser copyWith({bool? isActive}) {
+    return AdminUser(
+      id: id,
+      name: name,
+      planId: planId,
+      consumedCents: consumedCents,
+      isActive: isActive ?? this.isActive,
+    );
+  }
+}
