@@ -70,7 +70,7 @@ class AppState extends ChangeNotifier {
 
   final Map<String, PlanLimits> _planLimits = {};
   final List<AdminUser> _users = [];
-  String _appName = 'بنتارا';
+  String _appName = 'Pentara AI';
 
   Map<String, PlanLimits> get planLimits => Map.unmodifiable(_planLimits);
 

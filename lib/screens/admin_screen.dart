@@ -756,7 +756,7 @@ class _NameSection extends StatelessWidget {
       }
       return _ChoiceCard(
         selected: selected,
-        onTap: () => app.setAppName(name),
+        onTap: () => app.appName = name,
         semanticsLabel: 'اسم التطبيق: $name',
         child: Center(child: text),
       );

@@ -7,6 +7,7 @@ import '../data/models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/project_card.dart' show latinFigures;
+import 'admin_screen.dart';
 
 /// حسابي: عرض فقط (بلا دفع ولا فتح روابط). بطاقة المستخدم كحلية من ألوان
 /// الوضع الداكن في الوضعين.
@@ -90,6 +91,10 @@ class AccountScreen extends StatelessWidget {
           for (var i = 0; i < MockData.plans.length; i++) ...[
             if (i > 0) const SizedBox(height: 8),
             _PlanRow(plan: MockData.plans[i]),
+          ],
+          if (app.isOwner) ...[
+            const SizedBox(height: 24),
+            const _AdminEntry(),
           ],
           const SizedBox(height: 24),
           Center(
@@ -546,4 +551,129 @@ class _PlanRow extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// صف «لوحة التحكم»: يظهر للمالك فقط ويفتح AdminScreen.
+class _AdminEntry extends StatelessWidget {
+  const _AdminEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: c.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: c.goldLine, width: 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const AdminScreen()),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppColors.goldDiscGradient,
+                  ),
+                  child: const ExcludeSemantics(
+                    child: CustomPaint(painter: _SlidersPainter()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'لوحة التحكم',
+                        style: AppTypography.bodyStrong.copyWith(color: c.ink),
+                      ),
+                      Text(
+                        'للمالك فقط: الباقات والمستخدمون والترتيب',
+                        style: AppTypography.caption.copyWith(color: c.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                ExcludeSemantics(
+                  child: CustomPaint(
+                    size: const Size(16, 16),
+                    painter: _ChevronPainter(color: c.goldText),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ثلاثة أشرطة بمقابض: رمز الإعدادات.
+class _SlidersPainter extends CustomPainter {
+  const _SlidersPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 24);
+    final line = Paint()
+      ..color = const Color(0xFFFFFFFF)
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+    final knob = Paint()
+      ..color = const Color(0xFFFFFFFF)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    const ys = [8.0, 12.0, 16.0];
+    const xs = [14.5, 9.5, 13.0];
+    for (var i = 0; i < 3; i++) {
+      canvas.drawLine(Offset(6.5, ys[i]), Offset(17.5, ys[i]), line);
+      canvas.drawCircle(Offset(xs[i], ys[i]), 1.9, knob);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _SlidersPainter old) => false;
+}
+
+/// سهم يشير لاتجاه الدخول (يسار في RTL).
+class _ChevronPainter extends CustomPainter {
+  const _ChevronPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true;
+    final w = size.width, h = size.height;
+    final path = Path()
+      ..moveTo(w * 0.62, h * 0.2)
+      ..lineTo(w * 0.32, h * 0.5)
+      ..lineTo(w * 0.62, h * 0.8);
+    canvas.drawPath(path, p);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChevronPainter old) => old.color != color;
 }
