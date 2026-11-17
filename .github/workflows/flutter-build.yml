@@ -71,6 +71,38 @@ jobs:
           grep -q 'android.permission.INTERNET' "$M" || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' "$M"
           grep -n 'INTERNET' "$M"
 
+      - name: Release signing (fixed key)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KS_B64" ]; then echo "No signing secrets: using the debug key"; exit 0; fi
+          echo "$KS_B64" | tr -d ' \r\n' | base64 -d > android/app/upload.jks
+          python3 - <<'PY'
+          import os, pathlib
+          pw = os.environ["KS_PASS"].strip(); alias = os.environ.get("KEY_ALIAS", "").strip() or "pentara"
+          kts = pathlib.Path("android/app/build.gradle.kts"); gro = pathlib.Path("android/app/build.gradle")
+          if kts.exists():
+              s = kts.read_text()
+              block = ('    signingConfigs {\n        create("release") {\n'
+                       '            storeFile = file("upload.jks")\n'
+                       f'            storePassword = "{pw}"\n            keyAlias = "{alias}"\n            keyPassword = "{pw}"\n'
+                       '        }\n    }\n')
+              s = s.replace("    buildTypes {", block + "    buildTypes {", 1)
+              s = s.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("release")')
+              kts.write_text(s); print("signed (kts):", 'getByName("release")' in s)
+          elif gro.exists():
+              s = gro.read_text()
+              block = ("    signingConfigs {\n        release {\n            storeFile file('upload.jks')\n"
+                       f"            storePassword '{pw}'\n            keyAlias '{alias}'\n            keyPassword '{pw}'\n        }}\n    }}\n")
+              s = s.replace("    buildTypes {", block + "    buildTypes {", 1)
+              s = s.replace("signingConfig signingConfigs.debug", "signingConfig signingConfigs.release")
+              gro.write_text(s); print("signed (groovy):", "signingConfigs.release" in s)
+          else:
+              raise SystemExit("no android/app/build.gradle found")
+          PY
+
       - run: flutter pub get
 
       - name: Analyze
