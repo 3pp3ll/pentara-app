@@ -21,8 +21,6 @@ class AccountScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final app = AppStateScope.of(context);
-    final account = MockData.account;
-    final credit = account.credit;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -38,18 +36,22 @@ class AccountScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      account.displayName,
-                      style: AppTypography.title.copyWith(color: c.ink),
+                    ListenableBuilder(
+                      listenable: LiveController.instance,
+                      builder: (context, _) => Text(
+                        LiveController.instance.displayName,
+                        style: AppTypography.title.copyWith(color: c.ink),
+                      ),
                     ),
-                    // رقم الحساب الحقيقي يظهر بعد إنشاء الحساب فقط.
+                    // رقم الحساب يظهر بعد التسجيل فقط.
                     ListenableBuilder(
                       listenable: LiveController.instance,
                       builder: (context, _) {
-                        final id = LiveController.instance.user?.id;
+                        final live = LiveController.instance;
+                        final id = live.isRegistered ? live.user!.id : null;
                         if (id == null) {
                           return Text(
-                            'لم يُنشأ الحساب بعد',
+                            'زائر — سجّل لحفظ جلساتك',
                             style: AppTypography.caption.copyWith(color: c.inkMuted),
                           );
                         }
@@ -84,9 +86,9 @@ class AccountScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // البطاقة وQR تظهر بعد إنشاء الحساب فقط (الرابط مبني على ID الحقيقي).
-                  if (live.user != null) ...[
+                  if (live.isRegistered) ...[
                     _UserCard(
-                      name: account.displayName,
+                      name: live.displayName,
                       userId: live.user!.id,
                       memberSince: app.memberSince,
                       points: app.points,
@@ -114,9 +116,6 @@ class AccountScreen extends StatelessWidget {
             },
           ),
 
-          // ---- رصيد النماذج
-          _CreditCard(credit: credit),
-          const SizedBox(height: 24),
 
           // ---- الباقات
           Text('الباقات', style: AppTypography.title.copyWith(color: c.ink)),
@@ -125,10 +124,20 @@ class AccountScreen extends StatelessWidget {
             if (i > 0) const SizedBox(height: 8),
             _PlanRow(plan: MockData.plans[i]),
           ],
-          if (app.isOwner) ...[
-            const SizedBox(height: 24),
-            const _AdminEntry(),
-          ],
+          // لوحة التحكم: تظهر فقط بعد دخول المالك بحسابه.
+          ListenableBuilder(
+            listenable: LiveController.instance,
+            builder: (context, _) {
+              final live = LiveController.instance;
+              if (!live.isRegistered || !(live.user?.isOwner ?? false)) {
+                return const SizedBox.shrink();
+              }
+              return const Padding(
+                padding: EdgeInsets.only(top: 24),
+                child: _AdminEntry(),
+              );
+            },
+          ),
           const SizedBox(height: 24),
           Center(
             child: Text(

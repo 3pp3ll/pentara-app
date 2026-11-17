@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/app_state.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
+import '../live/live_api.dart';
 import '../live/live_projects_screen.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
@@ -80,7 +81,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final now = _read();
-    _greeting = greetingFor(now, MockData.account.displayName);
+    _greeting = greetingFor(now, LiveController.instance.displayName);
+    LiveController.instance.addListener(_sync);
     _date = arabicDateLabel(now);
     _schedule(now);
   }
@@ -88,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _sync() {
     if (!mounted) return;
     final now = _read();
-    final g = greetingFor(now, MockData.account.displayName);
+    final g = greetingFor(now, LiveController.instance.displayName);
     final d = arabicDateLabel(now);
     if (g != _greeting || d != _date) {
       setState(() {
@@ -124,6 +126,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    LiveController.instance.removeListener(_sync);
     _timer?.cancel();
     super.dispose();
   }

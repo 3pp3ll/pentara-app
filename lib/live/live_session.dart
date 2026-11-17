@@ -7,12 +7,16 @@ import 'live_api.dart';
 
 /// نوع المخرج المطلوب من الطاولة.
 enum LiveOutput {
-  plan('خطة عمل'),
-  research('بحث ودراسة'),
-  appIdea('فكرة تطبيق');
+  plan('خطة عمل', 'نصوص وخطط'),
+  research('بحث ودراسة', 'بحثية'),
+  appIdea('فكرة تطبيق', 'برمجية'),
+  web('صفحة ويب', 'ويب');
 
-  const LiveOutput(this.label);
+  const LiveOutput(this.label, this.category);
   final String label;
+
+  /// اسم الفئة في ملخص المشاريع والمختبر.
+  final String category;
 }
 
 enum LivePhase { idle, round1, round2, summary, revising, done, failed }
@@ -109,6 +113,10 @@ class LiveSession extends ChangeNotifier {
   String? error;
   int costMicros = 0;
   bool saved = false;
+
+  /// جرت في هذا التشغيل (لا مفتوحة من المحفوظات): الزائر ينسخ خلاصتها مرة واحدة.
+  bool ranHere = false;
+  bool guestCopied = false;
   bool _disposed = false;
 
   String get title {
@@ -270,6 +278,7 @@ class LiveSession extends ChangeNotifier {
     error = null;
     costMicros = 0;
     createdAt = DateTime.now();
+    ranHere = true;
 
     // الجولة ١: كل عضو يكتب رأيه بالتوازي.
     phase = LivePhase.round1;
@@ -344,7 +353,8 @@ class LiveSession extends ChangeNotifier {
             'content': '$_task$_notesBlock\n\nالجولة الأولى:\n$round1\nجولة التصحيح:\n${_transcript(2)}\n'
                 'اكتب الخلاصة النهائية بهذه الأقسام وبعناوين واضحة: '
                 'الخلاصة في سطرين، الخطة أو المحتوى الأساسي، الأرقام والتكاليف التقديرية، '
-                'المخاطر وطريقة تجنبها، الخطوة التالية. لا تكتب كوداً.',
+                'المخاطر وطريقة تجنبها، الخطوة التالية. لا تكتب كوداً.'
+                '${output == LiveOutput.web ? ' ولأن المخرج صفحة ويب: اكتب أقسام الصفحة بالترتيب ونص كل قسم جاهزاً للنشر.' : ''}',
           },
         ],
       );

@@ -70,6 +70,20 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
       _toast('اكتب فكرتك بتفصيل أكثر (10 أحرف على الأقل)');
       return;
     }
+    final live = LiveController.instance;
+    // زائر: تجربة واحدة قبل التسجيل.
+    if (live.user == null) {
+      final ok = await live.ensureGuest();
+      if (!mounted) return;
+      if (!ok) {
+        _toast(live.error ?? 'تعذّر بدء التجربة');
+        return;
+      }
+    }
+    if (_blocked) {
+      setState(() {});
+      return;
+    }
     await s.start();
     if (!mounted || !identical(s, _s)) return;
     if (s.phase == LivePhase.done) {
@@ -148,12 +162,33 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     return Scaffold(backgroundColor: c.bg, body: SafeArea(child: body));
   }
 
+  /// لا يمكن بدء جلسة جديدة: الزائر استخدم تجربته، أو المسجّل بلا باقة.
+  bool get _blocked {
+    final live = LiveController.instance;
+    if (!live.configured) return true;
+    if (live.isGuest) {
+      return LiveHub.instance.sessions.isNotEmpty || (live.user?.balanceMicros ?? 0) <= 0;
+    }
+    if (live.isRegistered) return !(live.user?.hasPlan ?? false);
+    return false; // غير مسجّل: يبدأ كزائر
+  }
+
+  String get _blockedText {
+    final live = LiveController.instance;
+    if (live.isGuest) {
+      return 'انتهت تجربتك المجانية (مشروع واحد). سجّل حسابك لتحفظ جلستك وتكمل بمشاريع أكثر.';
+    }
+    return 'فعّل باقتك بالكود من المتجر لتبدأ جلسات جديدة.';
+  }
+
   Widget _page(BuildContext context) {
     final c = context.colors;
     final s = _s;
     final live = LiveController.instance;
-    final canRun = live.isSignedIn && (live.user?.hasPlan ?? false);
-    final showInput = canRun && (s.discussing || s.phase == LivePhase.done || s.phase == LivePhase.revising);
+    final canRun = !_blocked || s.phase != LivePhase.idle;
+    // الزائر: مداخلة أثناء النقاش فقط، والتعديل بعد التسجيل.
+    final showInput = live.user != null &&
+        (s.discussing || (live.isRegistered && (s.phase == LivePhase.done || s.phase == LivePhase.revising)));
 
     return Column(
       children: [
@@ -166,10 +201,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
               if (!canRun && s.phase == LivePhase.idle) ...[
-                Text(
-                  'لتشغيل جلسة حقيقية: أنشئ حسابك وفعّل باقتك بالكود.',
-                  style: AppTypography.body.copyWith(color: c.inkMuted),
-                ),
+                Text(_blockedText, style: AppTypography.body.copyWith(color: c.inkMuted)),
                 const SizedBox(height: 12),
                 const LiveAccountCard(),
               ] else ...[
@@ -201,6 +233,15 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                           style: AppTypography.label.copyWith(color: const Color(0xFFA8322E)))
                     else
                       _summary(context, r.summary, 'الخلاصة بعد التعديل'),
+                  ],
+                  if (live.isGuest && s.phase == LivePhase.done) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'سجّل حسابك لتعديل الخلاصة وحفظها وتصديرها. جلستك ستنتقل لحسابك تلقائياً.',
+                      style: AppTypography.label.copyWith(color: c.goldText),
+                    ),
+                    const SizedBox(height: 10),
+                    const LiveAccountCard(),
                   ],
                   if (s.canRetrySummary) ...[
                     const SizedBox(height: 12),
@@ -535,6 +576,54 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     );
   }
 
+  /// المسجّل: نسخ وحفظ كملف. الزائر: نسخ مرة واحدة لجلسة جرت الآن فقط.
+  Widget _summaryActions(BuildContext context, String text) {
+    final c = context.colors;
+    final live = LiveController.instance;
+    final s = _s;
+    if (!live.isRegistered) {
+      final canCopy = s.ranHere && !s.guestCopied;
+      if (!canCopy) {
+        return Text(
+          'النسخ والتصدير بعد تسجيل الدخول.',
+          textAlign: TextAlign.center,
+          style: AppTypography.caption.copyWith(color: c.inkMuted),
+        );
+      }
+      return GoldButton.secondary(
+        label: 'نسخ (مرة واحدة)',
+        expand: true,
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: text));
+          setState(() => s.guestCopied = true);
+          _toast('نُسخت الخلاصة. سجّل لتنسخ وتصدّر متى شئت');
+        },
+      );
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: GoldButton.secondary(
+            label: 'نسخ',
+            expand: true,
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: text));
+              _toast('نُسخت الخلاصة كاملة');
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: GoldButton.secondary(
+            label: 'حفظ كملف',
+            expand: true,
+            onTap: () => exportText(context, _s.title, text),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _summary(BuildContext context, String text, String title, {bool cut = false}) {
     final c = context.colors;
     return Container(
@@ -568,28 +657,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                 style: AppTypography.caption.copyWith(color: c.inkMuted)),
           ],
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: GoldButton.secondary(
-                  label: 'نسخ',
-                  expand: true,
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: text));
-                    _toast('نُسخت الخلاصة كاملة');
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: GoldButton.secondary(
-                  label: 'حفظ كملف',
-                  expand: true,
-                  onTap: () => exportText(context, _s.title, text),
-                ),
-              ),
-            ],
-          ),
+          _summaryActions(context, text),
         ],
       ),
     );

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -20,6 +21,9 @@ class LiveException implements Exception {
 class LiveUser {
   const LiveUser({
     required this.id,
+    this.name = '',
+    this.email = '',
+    this.guest = false,
     required this.plan,
     required this.planName,
     required this.balanceMicros,
@@ -30,6 +34,9 @@ class LiveUser {
 
   factory LiveUser.fromJson(Map<String, dynamic> j) => LiveUser(
         id: '${j['id'] ?? ''}',
+        name: '${j['name'] ?? ''}',
+        email: '${j['email'] ?? ''}',
+        guest: j['guest'] == true,
         plan: '${j['plan'] ?? 'none'}',
         planName: '${j['planName'] ?? ''}',
         balanceMicros: (j['balanceMicros'] as num?)?.toInt() ?? 0,
@@ -39,6 +46,9 @@ class LiveUser {
       );
 
   final String id;
+  final String name;
+  final String email;
+  final bool guest;
   final String plan;
   final String planName;
   final int balanceMicros;
@@ -47,6 +57,19 @@ class LiveUser {
   final bool isOwner;
 
   bool get hasPlan => plan != 'none';
+
+  LiveUser withBalance(int balance, int spent) => LiveUser(
+        id: id,
+        name: name,
+        email: email,
+        guest: guest,
+        plan: plan,
+        planName: planName,
+        balanceMicros: balance,
+        spentMicros: spent,
+        disabled: disabled,
+        isOwner: isOwner,
+      );
   String get balanceLabel => formatMicros(balanceMicros);
 }
 
@@ -73,12 +96,27 @@ class LiveController extends ChangeNotifier {
 
   static const String _prefsKey = 'pentara-login';
 
-  /// نص الإحالة تحت بطاقة المستخدم: يُعدَّل ويُخفى من لوحة التحكم على الويب.
-  static const String defaultReferText =
-      'ادعُ صديقاً: تحصل على \$5 من اشتراكه و500 نقطة، ويحصل هو على 100 نقطة. '
-      'إن اشترك في الباقة العليا تحصل على \$10 و1500 نقطة.';
-  String referText = defaultReferText;
-  bool referVisible = true;
+  /// نص الإحالة تحت بطاقة المستخدم: يكتبه المالك ويُظهره من لوحة التحكم على الويب.
+  String referText = '';
+  bool referVisible = false;
+
+  /// اسم الزائر قبل التسجيل: يُختار عشوائياً مرة ويُحفظ في الجهاز.
+  static const List<String> guestNames = [
+    'سلمان', 'نورة', 'فيصل', 'ريم', 'تركي', 'لمى', 'خالد', 'جود', 'ماجد', 'دانة',
+    'بدر', 'هيا', 'راكان', 'سارة', 'عمر', 'لين', 'يزيد', 'غلا', 'مشاري', 'رهف',
+    'سعود', 'شهد', 'نواف', 'جنى', 'عبدالعزيز', 'ليان', 'طلال', 'مها', 'وليد', 'أروى',
+  ];
+  static const String _guestNameKey = 'pentara-guest-name';
+  String guestName = guestNames[Random().nextInt(guestNames.length)];
+
+  /// إحصاءات عامة لكل المستخدمين (المختبر وملخص المشاريع قبل الدخول).
+  Map<String, dynamic> globalStats = const {};
+
+  /// مستخدم مسجّل ببريد (ليس زائراً).
+  bool get isRegistered => _user != null && !_user!.guest;
+  bool get isGuest => _user != null && _user!.guest;
+  String get displayName =>
+      isRegistered && _user!.name.trim().isNotEmpty ? _user!.name.trim() : guestName;
 
   String? _login;
   LiveUser? _user;
@@ -138,7 +176,9 @@ class LiveController extends ChangeNotifier {
     if (u is Map<String, dynamic>) _user = LiveUser.fromJson(u);
   }
 
-  Future<void> _run(Future<void> Function() job) async {
+  /// [forgetOn401]: أخطاء الدخول تعني انتهاء الجلسة، إلا في نماذج الدخول والتعديل
+  /// حيث تعني «كلمة مرور خاطئة» فلا نُخرج المستخدم.
+  Future<void> _run(Future<void> Function() job, {bool forgetOn401 = true}) async {
     _busy = true;
     _error = null;
     notifyListeners();
@@ -146,7 +186,7 @@ class LiveController extends ChangeNotifier {
       await job();
     } on LiveException catch (e) {
       _error = e.message;
-      if (e.status == 401 || e.status == 403) await _forget(keepError: true);
+      if (forgetOn401 && (e.status == 401 || e.status == 403)) await _forget(keepError: true);
     } catch (_) {
       _error = 'حدث خطأ غير متوقع';
     } finally {
@@ -160,15 +200,21 @@ class LiveController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _login = prefs.getString(_prefsKey);
+      final g = prefs.getString(_guestNameKey);
+      if (g != null && g.isNotEmpty) {
+        guestName = g;
+      } else {
+        await prefs.setString(_guestNameKey, guestName);
+      }
     } catch (_) {}
+    unawaited(loadStats());
     if (configured) {
       try {
         final data = await _send('GET', '/api/config', timeout: const Duration(seconds: 12));
         final cfg = data['config'];
         if (cfg is Map<String, dynamic>) {
-          final t = '${cfg['referText'] ?? ''}'.trim();
-          if (t.isNotEmpty) referText = t;
-          referVisible = cfg['referVisible'] != false;
+          referText = '${cfg['referText'] ?? ''}'.trim();
+          referVisible = cfg['referVisible'] == true;
         }
       } catch (_) {}
     }
@@ -197,12 +243,58 @@ class LiveController extends ChangeNotifier {
     await _save();
   }
 
-  Future<void> register() => _run(() async {
-        final data = await _send('POST', '/api/register');
-        _login = '${data['login']}';
-        _setUser(data);
-        await _save();
-      });
+  Future<void> _accept(Map<String, dynamic> data) async {
+    _login = '${data['login']}';
+    _setUser(data);
+    await _save();
+  }
+
+  /// زائر: تجربة واحدة قبل التسجيل. يُستدعى تلقائياً عند أول جلسة.
+  Future<bool> ensureGuest() async {
+    if (_user != null) return true;
+    await _run(() async => _accept(await _send('POST', '/api/guest')));
+    return _user != null;
+  }
+
+  /// حساب جديد (يحوّل الزائر إلى حساب ويحتفظ بجلسته).
+  Future<void> signup(String name, String email, String password) => _run(() async {
+        await _accept(await _send('POST', '/api/signup',
+            body: {'name': name.trim(), 'email': email.trim(), 'password': password}));
+      }, forgetOn401: false);
+
+  /// دخول ببريد وكلمة مرور (جلسة الزائر تنتقل للحساب).
+  Future<int> signin(String email, String password) async {
+    var moved = 0;
+    await _run(() async {
+      final data = await _send('POST', '/api/signin', body: {'email': email.trim(), 'password': password});
+      moved = (data['moved'] as num?)?.toInt() ?? 0;
+      await _accept(data);
+    }, forgetOn401: false);
+    return moved;
+  }
+
+  /// تعديل الاسم أو البريد أو كلمة المرور (البريد وكلمة المرور تحتاج الحالية).
+  Future<void> updateAccount({String? name, String? email, String? password, String? newPassword}) =>
+      _run(() async {
+        _setUser(await _send('POST', '/api/account', body: {
+          if (name != null) 'name': name,
+          if (email != null) 'email': email,
+          if (password != null) 'password': password,
+          if (newPassword != null && newPassword.isNotEmpty) 'newPassword': newPassword,
+        }));
+      }, forgetOn401: false);
+
+  Future<void> loadStats() async {
+    if (!configured) return;
+    try {
+      final data = await _send('GET', '/api/stats', timeout: const Duration(seconds: 15));
+      final st = data['stats'];
+      if (st is Map<String, dynamic>) {
+        globalStats = st;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
 
   /// رمز دخول يصدره المشرف: «12345678.xxxx».
   Future<void> useLogin(String raw) => _run(() async {
@@ -276,15 +368,7 @@ class LiveController extends ChangeNotifier {
     );
     final u = _user;
     if (u != null) {
-      _user = LiveUser(
-        id: u.id,
-        plan: u.plan,
-        planName: u.planName,
-        balanceMicros: reply.balanceMicros,
-        spentMicros: u.spentMicros + reply.costMicros,
-        disabled: u.disabled,
-        isOwner: u.isOwner,
-      );
+      _user = u.withBalance(reply.balanceMicros, u.spentMicros + reply.costMicros);
       notifyListeners();
     }
     return reply;

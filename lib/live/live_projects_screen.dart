@@ -6,6 +6,7 @@ import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
 import 'live_session.dart';
+import 'live_stats.dart';
 import 'scroll_top.dart';
 
 /// «المشاريع»: جلساتك الحقيقية المحفوظة في السيرفر. الضغط يفتحها في الطاولة.
@@ -145,6 +146,8 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                       GoldButton.secondary(label: 'جلسة جديدة', onTap: widget.onNew),
                   ],
                 ),
+                const SizedBox(height: 16),
+                const CategorySummary(),
                 const SizedBox(height: 16),
                 if (!signedIn)
                   Text(
