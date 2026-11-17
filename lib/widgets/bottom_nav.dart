@@ -4,7 +4,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 
 /// الشريط السفلي. الترتيب من اليمين بلا عكس يدوي (RTL):
-/// الرئيسية، الطاولة، المشاريع، المختبر، حسابي.
+/// الرئيسية، الطاولة، المشاريع، حسابي.
 ///
 /// الهيكل: DecoratedBox(surface + حد علوي) ← SafeArea(top: false) ← صف.
 /// كل عنصر بحد أدنى 72، فيتمدد مع تكبير الخط ولا يُصغَّر النص تحت 12.
@@ -24,7 +24,6 @@ class BottomNav extends StatelessWidget {
     _NavSpec('الرئيسية', _NavKind.home),
     _NavSpec('الطاولة', _NavKind.table),
     _NavSpec('المشاريع', _NavKind.projects),
-    _NavSpec('المختبر', _NavKind.lab),
     _NavSpec('حسابي', _NavKind.account),
   ];
 

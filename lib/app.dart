@@ -9,7 +9,6 @@ import 'live/live_session.dart';
 import 'live/live_table_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/lab_screen.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_typography.dart';
@@ -84,9 +83,8 @@ class _PentaraAppState extends State<PentaraApp> {
 const int _homeTabIndex = 0;
 const int _tableTabIndex = 1;
 const int _projectsTabIndex = 2;
-const int _labTabIndex = 3;
-const int _accountTabIndex = 4;
-const int _tabCount = 5;
+const int _accountTabIndex = 3;
+const int _tabCount = 4;
 
 /// غلاف التنقل: يملك فهرس التبويب ويراقب دورة حياة التطبيق، ويبلّغ
 /// [AppState] بظهور الطاولة فقط (ظهور التبويب والتطبيق في المقدمة شرطان).
@@ -215,7 +213,6 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
           onOpened: () => _select(_tableTabIndex),
           onNew: _newProject,
         ),
-      _labTabIndex => const LabScreen(),
       _ => const AccountScreen(),
     };
   }
