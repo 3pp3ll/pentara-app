@@ -38,6 +38,7 @@ class CategorySummary extends StatelessWidget {
   const CategorySummary({super.key});
 
   static const Map<LiveOutput, IconData> icons = {
+    LiveOutput.text: Icons.notes_rounded,
     LiveOutput.plan: Icons.description_rounded,
     LiveOutput.research: Icons.travel_explore_rounded,
     LiveOutput.appIdea: Icons.phone_iphone_rounded,

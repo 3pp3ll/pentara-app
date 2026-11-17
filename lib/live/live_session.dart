@@ -7,7 +7,8 @@ import 'live_api.dart';
 
 /// نوع المخرج المطلوب من الطاولة.
 enum LiveOutput {
-  plan('خطة عمل', 'نصوص وخطط'),
+  text('نصوص وتحليل', 'نصوص'),
+  plan('خطة عمل', 'خطط'),
   research('بحث ودراسة', 'بحثية'),
   appIdea('فكرة تطبيق', 'برمجية'),
   web('صفحة ويب', 'ويب');
@@ -103,7 +104,7 @@ class LiveSession extends ChangeNotifier {
 
   DateTime createdAt = DateTime.now();
   String idea = '';
-  LiveOutput output = LiveOutput.plan;
+  LiveOutput output = LiveOutput.text;
   LivePhase phase = LivePhase.idle;
   final List<LiveEntry> entries = [];
   final List<String> notes = [];

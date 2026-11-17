@@ -417,11 +417,16 @@ class _UserCard extends StatelessWidget {
                 ),
                 child: Semantics(
                   label: 'رمز QR لتحميل التطبيق',
-                  child: QrImageView(
-                    data: url,
-                    size: 112,
-                    padding: EdgeInsets.zero,
-                    backgroundColor: const Color(0xFFFFFFFF),
+                  // اتجاه ثابت من اليسار وهامش أبيض (منطقة هادئة) حتى تقرأه كل الكاميرات.
+                  child: Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: QrImageView(
+                      data: url,
+                      size: 112,
+                      padding: const EdgeInsets.all(6),
+                      errorCorrectionLevel: QrErrorCorrectLevel.M,
+                      backgroundColor: const Color(0xFFFFFFFF),
+                    ),
                   ),
                 ),
               ),

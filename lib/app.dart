@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/app_state.dart';
+import 'live/app_update.dart';
 import 'live/live_api.dart';
 import 'live/live_lab_screen.dart';
 import 'live/live_projects_screen.dart';
@@ -38,6 +39,7 @@ class _PentaraAppState extends State<PentaraApp> {
     _app = AppState(stepDuration: const Duration(milliseconds: 1200));
     _mode = _app.themeMode;
     _app.addListener(_onAppChanged);
+    AppUpdate.instance.check();
     LiveController.instance.init().then((_) {
       if (LiveController.instance.isSignedIn) LiveHub.instance.loadList();
     });
@@ -245,14 +247,21 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
         backgroundColor: c.bg,
         body: SafeArea(
           bottom: false,
-          child: IndexedStack(
-            index: _index,
+          child: Column(
             children: [
-              for (var i = 0; i < _tabCount; i++)
-                TickerMode(
-                  enabled: i == _index,
-                  child: _screen(i),
+              const UpdateBanner(),
+              Expanded(
+                child: IndexedStack(
+                  index: _index,
+                  children: [
+                    for (var i = 0; i < _tabCount; i++)
+                      TickerMode(
+                        enabled: i == _index,
+                        child: _screen(i),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
