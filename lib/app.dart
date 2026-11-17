@@ -4,12 +4,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/app_state.dart';
 import 'live/live_api.dart';
+import 'live/live_projects_screen.dart';
+import 'live/live_session.dart';
 import 'live/live_table_screen.dart';
 import 'screens/account_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/lab_screen.dart';
-import 'screens/projects_screen.dart';
-import 'screens/table_screen.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_typography.dart';
@@ -38,7 +38,9 @@ class _PentaraAppState extends State<PentaraApp> {
     _app = AppState(stepDuration: const Duration(milliseconds: 1200));
     _mode = _app.themeMode;
     _app.addListener(_onAppChanged);
-    LiveController.instance.init();
+    LiveController.instance.init().then((_) {
+      if (LiveController.instance.isSignedIn) LiveHub.instance.loadList();
+    });
   }
 
   void _onAppChanged() {
@@ -155,17 +157,21 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     );
   }
 
-  /// «مشروع جديد»: يفتح الطاولة الحقيقية (السيرفر). العرض التجريبي يبقى في تبويب الطاولة.
+  /// «مشروع جديد»: جلسة جديدة في تبويب الطاولة الحقيقية.
   void _newProject() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const LiveTableScreen()),
-    );
+    if (!LiveHub.instance.current.running) LiveHub.instance.newSession();
+    _select(_tableTabIndex);
   }
 
-  /// الضغط على بطاقة مشروع: يختار معرّفه ثم يفتح الطاولة.
-  void _openProject(String id) {
-    _app?.selectProject(id);
-    _select(_tableTabIndex);
+  /// الضغط على جلسة محفوظة: تُفتح في الطاولة.
+  Future<void> _openProject(String id) async {
+    final ok = await LiveHub.instance.open(id);
+    if (!mounted) return;
+    if (ok) {
+      _select(_tableTabIndex);
+    } else {
+      _notify('تعذّر فتح الجلسة. تحقق من الاتصال');
+    }
   }
 
   void _showNoNotifications() {
@@ -185,8 +191,11 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
           onOpenProject: _openProject,
           onNotifications: _showNoNotifications,
         ),
-      _tableTabIndex => const TableScreen(),
-      _projectsTabIndex => ProjectsScreen(onOpenProject: _openProject),
+      _tableTabIndex => const LiveTableScreen(embedded: true),
+      _projectsTabIndex => LiveProjectsScreen(
+          onOpened: () => _select(_tableTabIndex),
+          onNew: _newProject,
+        ),
       _labTabIndex => const LabScreen(),
       _ => const AccountScreen(),
     };

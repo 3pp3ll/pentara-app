@@ -13,24 +13,39 @@ import 'live_api.dart';
 import 'live_session.dart';
 import 'rich_text_view.dart';
 
-/// طاولة حقيقية: المستخدم يكتب فكرته، والأعضاء الخمسة يتناقشون فعلياً عبر
-/// السيرفر، ثم يكتب رئيس الجلسة الخلاصة.
+/// الطاولة الحقيقية: المستخدم يكتب فكرته، والأعضاء الخمسة يتناقشون عبر السيرفر،
+/// ويستطيع التدخل أثناء النقاش، ثم يكتب رئيس الجلسة الخلاصة ويطبّق التعديلات.
+/// [embedded]: داخل تبويب «الطاولة» (بلا زر رجوع).
 class LiveTableScreen extends StatefulWidget {
-  const LiveTableScreen({super.key});
+  const LiveTableScreen({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<LiveTableScreen> createState() => _LiveTableScreenState();
 }
 
 class _LiveTableScreenState extends State<LiveTableScreen> {
-  final LiveSession _s = LiveSession();
   final TextEditingController _idea = TextEditingController();
+  final TextEditingController _note = TextEditingController();
   final ScrollController _scroll = ScrollController();
+  String _shownId = '';
+
+  LiveHub get hub => LiveHub.instance;
+  LiveSession get _s => hub.current;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncFields();
+    hub.addListener(_syncFields);
+  }
 
   @override
   void dispose() {
-    _s.dispose();
+    hub.removeListener(_syncFields);
     _idea.dispose();
+    _note.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -38,21 +53,60 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
   Member _member(MemberId id) =>
       MockData.members.firstWhere((m) => m.id == id, orElse: () => MockData.members.first);
 
+  /// عند تبديل الجلسة (جديدة أو مفتوحة من المشاريع) نعبّئ خانة الفكرة منها.
+  void _syncFields() {
+    if (_shownId == _s.id) return;
+    _shownId = _s.id;
+    _idea.text = _s.idea;
+    _note.clear();
+  }
+
   Future<void> _start() async {
     FocusScope.of(context).unfocus();
-    _s.idea = _idea.text;
-    if (_s.idea.trim().length < 10) {
+    final s = _s;
+    s.idea = _idea.text;
+    if (s.idea.trim().length < 10) {
       _toast('اكتب فكرتك بتفصيل أكثر (10 أحرف على الأقل)');
       return;
     }
-    await _s.start();
-    if (!mounted) return;
-    if (_s.phase == LivePhase.done) {
-      _toast('اكتملت الجلسة');
+    await s.start();
+    if (!mounted || !identical(s, _s)) return;
+    if (s.phase == LivePhase.done) {
+      _toast('اكتملت الجلسة وحُفظت في «المشاريع»');
       _toBottom();
-    } else if (_s.phase == LivePhase.failed) {
-      _toast('توقفت الجلسة: ${_s.error ?? ''}');
+    } else if (s.phase == LivePhase.failed) {
+      _toast('توقفت الجلسة: ${s.error ?? ''}');
     }
+  }
+
+  Future<void> _send() async {
+    final t = _note.text.trim();
+    if (t.isEmpty) return;
+    FocusScope.of(context).unfocus();
+    final s = _s;
+    if (s.discussing) {
+      s.addNote(t);
+      _note.clear();
+      _toast('وصلت مداخلتك للطاولة');
+      return;
+    }
+    if (s.phase == LivePhase.done) {
+      _note.clear();
+      _toBottom();
+      await s.revise(t);
+      if (!mounted || !identical(s, _s)) return;
+      final last = s.revisions.isEmpty ? null : s.revisions.last;
+      _toast(last?.error == null ? 'طُبّق التعديل وحُفظ' : 'تعذّر التعديل: ${last!.error}');
+      _toBottom();
+    }
+  }
+
+  void _newSession() {
+    if (_s.running) {
+      _toast('انتظر حتى تكتمل الجلسة الحالية');
+      return;
+    }
+    hub.newSession();
   }
 
   void _toBottom() {
@@ -80,92 +134,138 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Scaffold(
-      backgroundColor: c.bg,
-      body: SafeArea(
-        child: ListenableBuilder(
+    final body = ListenableBuilder(
+      listenable: hub,
+      builder: (context, _) {
+        return ListenableBuilder(
           listenable: Listenable.merge([_s, LiveController.instance]),
-          builder: (context, _) {
-            final live = LiveController.instance;
-            final canRun = live.isSignedIn && (live.user?.hasPlan ?? false);
-            return Column(
-              children: [
-                _header(context),
-                Expanded(
-                  child: ListView(
-                    controller: _scroll,
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-                    children: [
-                      if (!canRun) ...[
-                        Text(
-                          'لتشغيل جلسة حقيقية: أنشئ حسابك وفعّل باقتك بالكود.',
-                          style: AppTypography.body.copyWith(color: c.inkMuted),
-                        ),
-                        const SizedBox(height: 12),
-                        const LiveAccountCard(),
-                      ] else ...[
-                        _composer(context),
-                        if (_s.phase != LivePhase.idle) ...[
-                          const SizedBox(height: 20),
-                          _phaseBar(context),
-                          const SizedBox(height: 12),
-                          for (final e in _s.entries) ...[
-                            _bubble(context, e),
-                            const SizedBox(height: 10),
-                          ],
-                          if (_s.phase == LivePhase.summary) _waiting(context, 'رئيس الجلسة يكتب الخلاصة…'),
-                          if (_s.summary.isNotEmpty) _summary(context),
-                          if (_s.canRetrySummary) ...[
-                            const SizedBox(height: 12),
-                            GoldButton.primary(
-                              label: 'أكمل إلى الخلاصة',
-                              expand: true,
-                              onTap: () async {
-                                await _s.writeSummary();
-                                if (mounted && _s.phase == LivePhase.done) _toBottom();
-                              },
-                            ),
-                          ],
-                          if (_s.error != null) ...[
-                            const SizedBox(height: 8),
-                            Text(_s.error!,
-                                style: AppTypography.label.copyWith(color: const Color(0xFFA8322E))),
-                          ],
-                        ],
-                      ],
-                    ],
-                  ),
+          builder: (context, _) => _page(context),
+        );
+      },
+    );
+    if (widget.embedded) return SafeArea(bottom: false, child: body);
+    return Scaffold(backgroundColor: c.bg, body: SafeArea(child: body));
+  }
+
+  Widget _page(BuildContext context) {
+    final c = context.colors;
+    final s = _s;
+    final live = LiveController.instance;
+    final canRun = live.isSignedIn && (live.user?.hasPlan ?? false);
+    final showInput = canRun && (s.discussing || s.phase == LivePhase.done || s.phase == LivePhase.revising);
+
+    return Column(
+      children: [
+        _header(context),
+        Expanded(
+          child: ListView(
+            controller: _scroll,
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            children: [
+              if (!canRun && s.phase == LivePhase.idle) ...[
+                Text(
+                  'لتشغيل جلسة حقيقية: أنشئ حسابك وفعّل باقتك بالكود.',
+                  style: AppTypography.body.copyWith(color: c.inkMuted),
                 ),
+                const SizedBox(height: 12),
+                const LiveAccountCard(),
+              ] else ...[
+                if (s.phase == LivePhase.idle) _composer(context) else _ideaCard(context),
+                if (s.phase != LivePhase.idle) ...[
+                  const SizedBox(height: 20),
+                  _phaseBar(context),
+                  const SizedBox(height: 12),
+                  for (final e in s.entries) ...[
+                    _bubble(context, e),
+                    const SizedBox(height: 10),
+                  ],
+                  if (s.notes.isNotEmpty) ...[
+                    for (final n in s.notes) ...[
+                      _userBubble(context, 'مداخلتك', n),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
+                  if (s.phase == LivePhase.summary) _waiting(context, 'رئيس الجلسة يكتب الخلاصة…'),
+                  if (s.summary.isNotEmpty) _summary(context, s.summary, 'الخلاصة الموحّدة', cut: s.summaryCut),
+                  for (final r in s.revisions) ...[
+                    const SizedBox(height: 14),
+                    _userBubble(context, 'طلب تعديل', r.request),
+                    const SizedBox(height: 10),
+                    if (r.pending)
+                      _waiting(context, 'رئيس الجلسة يطبّق التعديل…')
+                    else if (r.error != null)
+                      Text('تعذّر التعديل: ${r.error}',
+                          style: AppTypography.label.copyWith(color: const Color(0xFFA8322E)))
+                    else
+                      _summary(context, r.summary, 'الخلاصة بعد التعديل'),
+                  ],
+                  if (s.canRetrySummary) ...[
+                    const SizedBox(height: 12),
+                    GoldButton.primary(
+                      label: 'أكمل إلى الخلاصة',
+                      expand: true,
+                      onTap: () async {
+                        await s.writeSummary();
+                        if (mounted && s.phase == LivePhase.done) _toBottom();
+                      },
+                    ),
+                  ],
+                  if (s.error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(s.error!, style: AppTypography.label.copyWith(color: const Color(0xFFA8322E))),
+                  ],
+                ],
               ],
-            );
-          },
+            ],
+          ),
         ),
-      ),
+        if (showInput) _inputBar(context),
+      ],
     );
   }
 
   Widget _header(BuildContext context) {
     final c = context.colors;
     final u = LiveController.instance.user;
+    final s = _s;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 24, 8),
+      padding: EdgeInsetsDirectional.fromSTEB(widget.embedded ? 24 : 12, 8, 16, 8),
       child: Row(
         children: [
-          IconButton(
-            tooltip: 'رجوع',
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: Icon(Icons.arrow_forward_rounded, color: c.ink),
-          ),
-          const SizedBox(width: 4),
+          if (!widget.embedded) ...[
+            IconButton(
+              tooltip: 'رجوع',
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: Icon(Icons.arrow_forward_rounded, color: c.ink),
+            ),
+            const SizedBox(width: 4),
+          ],
           Expanded(
-            child: Text('جلسة جديدة', style: AppTypography.title.copyWith(color: c.ink)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  s.phase == LivePhase.idle ? 'جلسة جديدة' : 'الطاولة',
+                  style: AppTypography.title.copyWith(color: c.ink),
+                ),
+                if (u != null)
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      'رصيدك ${u.balanceLabel}',
+                      style: latinFigures(AppTypography.caption).copyWith(color: c.goldText),
+                    ),
+                  ),
+              ],
+            ),
           ),
-          if (u != null)
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text(
-                u.balanceLabel,
-                style: latinFigures(AppTypography.label).copyWith(color: c.goldText),
+          if (s.phase != LivePhase.idle)
+            TextButton.icon(
+              onPressed: s.running ? null : _newSession,
+              icon: Icon(Icons.add_rounded, size: 18, color: s.running ? c.inkMuted : c.goldText),
+              label: Text(
+                'جلسة جديدة',
+                style: AppTypography.label.copyWith(color: s.running ? c.inkMuted : c.goldText),
               ),
             ),
         ],
@@ -175,7 +275,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
 
   Widget _composer(BuildContext context) {
     final c = context.colors;
-    final locked = _s.running;
+    final s = _s;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -183,29 +283,10 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: _idea,
-          enabled: !locked,
           minLines: 4,
           maxLines: 10,
           style: AppTypography.body.copyWith(color: c.ink),
-          decoration: InputDecoration(
-            hintText: 'اشرح فكرتك أو مشروعك بالتفصيل…',
-            hintStyle: AppTypography.body.copyWith(color: c.inkMuted),
-            filled: true,
-            fillColor: c.surface,
-            contentPadding: const EdgeInsets.all(14),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: c.border),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: c.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: c.goldLine, width: 1.5),
-            ),
-          ),
+          decoration: _fieldDecoration(context, 'اشرح فكرتك أو مشروعك بالتفصيل…'),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -215,33 +296,122 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             for (final o in LiveOutput.values)
               ChoiceChip(
                 label: Text(o.label),
-                selected: _s.output == o,
-                onSelected: locked ? null : (_) => setState(() => _s.output = o),
-                labelStyle: AppTypography.label.copyWith(
-                  color: _s.output == o ? c.goldText : c.ink,
-                ),
+                selected: s.output == o,
+                onSelected: (_) => setState(() => s.output = o),
+                labelStyle: AppTypography.label.copyWith(color: s.output == o ? c.goldText : c.ink),
                 selectedColor: c.surfaceSoft,
                 backgroundColor: c.surface,
-                side: BorderSide(color: _s.output == o ? c.goldLine : c.border),
+                side: BorderSide(color: s.output == o ? c.goldLine : c.border),
                 showCheckmark: false,
               ),
           ],
         ),
         const SizedBox(height: 16),
-        GoldButton.primary(
-          label: locked ? 'الطاولة تتناقش…' : (_s.phase == LivePhase.idle ? 'ابدأ النقاش' : 'جلسة جديدة بنفس الفكرة'),
-          expand: true,
-          onTap: locked ? null : _start,
-        ),
+        GoldButton.primary(label: 'ابدأ النقاش', expand: true, onTap: _start),
       ],
+    );
+  }
+
+  Widget _ideaCard(BuildContext context) {
+    final c = context.colors;
+    final s = _s;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.surfaceSoft,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text('الفكرة', style: AppTypography.label.copyWith(color: c.inkMuted)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: c.goldLine),
+                ),
+                child: Text(s.output.label, style: AppTypography.caption.copyWith(color: c.goldText)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(s.idea, style: AppTypography.body.copyWith(color: c.ink)),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(BuildContext context, String hint) {
+    final c = context.colors;
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: AppTypography.body.copyWith(color: c.inkMuted),
+      filled: true,
+      fillColor: c.surface,
+      contentPadding: const EdgeInsets.all(14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: c.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: c.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: c.goldLine, width: 1.5),
+      ),
+    );
+  }
+
+  /// شريط الكتابة السفلي: مداخلة أثناء النقاش، أو طلب تعديل بعد الخلاصة.
+  Widget _inputBar(BuildContext context) {
+    final c = context.colors;
+    final s = _s;
+    final busy = s.phase == LivePhase.revising || s.phase == LivePhase.summary;
+    final hint = s.discussing ? 'تدخّل في النقاش… (يقرؤها الأعضاء)' : 'اطلب تعديلاً على الخلاصة…';
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(top: BorderSide(color: c.border)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _note,
+              enabled: !busy,
+              minLines: 1,
+              maxLines: 4,
+              style: AppTypography.body.copyWith(color: c.ink),
+              decoration: _fieldDecoration(context, busy ? 'انتظر قليلاً…' : hint)
+                  .copyWith(contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GoldButton.primary(
+            label: s.discussing ? 'مداخلة' : 'إرسال',
+            onTap: busy ? null : _send,
+          ),
+        ],
+      ),
     );
   }
 
   Widget _phaseBar(BuildContext context) {
     final c = context.colors;
+    final s = _s;
     return Row(
       children: [
-        if (_s.running)
+        if (s.running)
           Padding(
             padding: const EdgeInsetsDirectional.only(end: 8),
             child: SizedBox(
@@ -251,12 +421,17 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             ),
           ),
         Expanded(
-          child: Text(_s.phaseLabel, style: AppTypography.bodyStrong.copyWith(color: c.goldText)),
+          child: Text(s.phaseLabel, style: AppTypography.bodyStrong.copyWith(color: c.goldText)),
         ),
+        if (s.saved && !s.running)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: 8),
+            child: Text('محفوظة', style: AppTypography.caption.copyWith(color: const Color(0xFF1F6B4A))),
+          ),
         Directionality(
           textDirection: TextDirection.ltr,
           child: Text(
-            formatMicros(_s.costMicros),
+            formatMicros(s.costMicros),
             style: latinFigures(AppTypography.label).copyWith(color: c.inkMuted),
           ),
         ),
@@ -283,30 +458,54 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
           ),
           padding: const EdgeInsets.all(14),
           child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              MemberAvatar(member: m, size: 30, isSpeaking: e.pending),
-              const SizedBox(width: 8),
-              Text(m.title, style: AppTypography.bodyStrong.copyWith(color: name)),
-              const Spacer(),
-              Text(
-                e.round == 1 ? 'الجولة ١' : 'التصحيح',
-                style: AppTypography.caption.copyWith(color: c.inkMuted),
+              Row(
+                children: [
+                  MemberAvatar(member: m, size: 30, isSpeaking: e.pending),
+                  const SizedBox(width: 8),
+                  Text(m.title, style: AppTypography.bodyStrong.copyWith(color: name)),
+                  const Spacer(),
+                  Text(
+                    e.round == 1 ? 'الجولة ١' : 'التصحيح',
+                    style: AppTypography.caption.copyWith(color: c.inkMuted),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
+              if (e.pending)
+                Text('يفكّر…', style: AppTypography.label.copyWith(color: c.inkMuted))
+              else if (e.error != null)
+                Text('تعذّر الرد: ${e.error}',
+                    style: AppTypography.label.copyWith(color: const Color(0xFFA8322E)))
+              else
+                RichTextView(e.text),
             ],
           ),
-          const SizedBox(height: 8),
-          if (e.pending)
-            Text('يفكّر…', style: AppTypography.label.copyWith(color: c.inkMuted))
-          else if (e.error != null)
-            Text('تعذّر الرد: ${e.error}',
-                style: AppTypography.label.copyWith(color: const Color(0xFFA8322E)))
-          else
-            RichTextView(e.text),
-        ],
-          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _userBubble(BuildContext context, String label, String text) {
+    final c = context.colors;
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 320),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: c.surfaceSoft,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: c.goldLine),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: AppTypography.caption.copyWith(color: c.goldText)),
+            const SizedBox(height: 4),
+            Text(text, style: AppTypography.body.copyWith(color: c.ink)),
+          ],
         ),
       ),
     );
@@ -330,7 +529,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     );
   }
 
-  Widget _summary(BuildContext context) {
+  Widget _summary(BuildContext context, String text, String title, {bool cut = false}) {
     final c = context.colors;
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -351,16 +550,15 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
               MemberAvatar(member: _member(MemberId.chair), size: 30),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('الخلاصة الموحّدة',
-                    style: AppTypography.title.copyWith(color: c.goldText)),
+                child: Text(title, style: AppTypography.title.copyWith(color: c.goldText)),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          RichTextView(_s.summary),
-          if (_s.summaryCut) ...[
+          RichTextView(text),
+          if (cut) ...[
             const SizedBox(height: 8),
-            Text('الخلاصة طويلة وقد تكون اختُصرت.',
+            Text('الخلاصة طويلة وقد تكون اختُصرت. اطلب «أكمل الخلاصة» في التعديل.',
                 style: AppTypography.caption.copyWith(color: c.inkMuted)),
           ],
           const SizedBox(height: 12),
@@ -368,8 +566,8 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             label: 'نسخ الخلاصة',
             expand: true,
             onTap: () {
-              Clipboard.setData(ClipboardData(text: _s.summary));
-              _toast('نُسخت الخلاصة');
+              Clipboard.setData(ClipboardData(text: text));
+              _toast('نُسخت الخلاصة كاملة');
             },
           ),
         ],

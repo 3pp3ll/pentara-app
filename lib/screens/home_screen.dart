@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../data/app_state.dart';
 import '../data/mock_data.dart';
 import '../data/models.dart';
+import '../live/live_projects_screen.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/gold_button.dart';
@@ -131,11 +132,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final c = context.colors;
 
-    final recent = <Project>[];
-    for (final id in MockData.recentProjectIds) {
-      final p = MockData.projectById(id);
-      if (p != null) recent.add(p);
-    }
 
     // الحشو العلوي 16 تحت SafeArea التي يوفّرها الغلاف (بلا SafeArea ثانية).
     return SingleChildScrollView(
@@ -197,14 +193,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             style: AppTypography.title.copyWith(color: c.ink),
           ),
           const SizedBox(height: 12),
-          for (var i = 0; i < recent.length; i++) ...[
-            if (i > 0) const SizedBox(height: 12),
-            ProjectCard(
-              project: recent[i],
-              showDetails: false,
-              onTap: () => widget.onOpenProject(recent[i].id),
-            ),
-          ],
+          LiveRecentSessions(onOpen: widget.onOpenProject),
         ],
       ),
     );

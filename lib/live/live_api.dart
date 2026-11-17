@@ -111,9 +111,11 @@ class LiveController extends ChangeNotifier {
     }
     http.Response res;
     try {
-      final f = method == 'GET'
-          ? http.get(_u(path), headers: _headers)
-          : http.post(_u(path), headers: _headers, body: jsonEncode(body ?? {}));
+      final f = switch (method) {
+        'GET' => http.get(_u(path), headers: _headers),
+        'DELETE' => http.delete(_u(path), headers: _headers),
+        _ => http.post(_u(path), headers: _headers, body: jsonEncode(body ?? {})),
+      };
       res = await f.timeout(timeout);
     } on TimeoutException {
       throw LiveException('تأخر الرد. تحقق من الاتصال وحاول مرة أخرى');
@@ -228,6 +230,29 @@ class LiveController extends ChangeNotifier {
   Future<void> signOut() async {
     await _forget();
     notifyListeners();
+  }
+
+  // ---- الجلسات المحفوظة ----
+  Future<List<Map<String, dynamic>>> listSessions() async {
+    final data = await _send('GET', '/api/sessions');
+    final list = data['sessions'];
+    if (list is! List) return const [];
+    return [for (final x in list) if (x is Map<String, dynamic>) x];
+  }
+
+  Future<Map<String, dynamic>> getSession(String id) async {
+    final data = await _send('GET', '/api/sessions/$id');
+    final s = data['session'];
+    if (s is! Map<String, dynamic>) throw LiveException('الجلسة غير موجودة', 404);
+    return s;
+  }
+
+  Future<void> saveSession(Map<String, dynamic> session) async {
+    await _send('POST', '/api/sessions', body: {'session': session});
+  }
+
+  Future<void> deleteSession(String id) async {
+    await _send('DELETE', '/api/sessions/$id');
   }
 
   /// مقعد واحد يتكلم. السيرفر يختار النموذج حسب الباقة ويخصم التكلفة.

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import '../theme/app_colors.dart';
@@ -13,7 +15,7 @@ enum LiveOutput {
   final String label;
 }
 
-enum LivePhase { idle, round1, round2, summary, done, failed }
+enum LivePhase { idle, round1, round2, summary, revising, done, failed }
 
 /// رسالة عضو في الجلسة الحية.
 class LiveEntry {
@@ -23,6 +25,33 @@ class LiveEntry {
   String text = '';
   String? error;
   bool pending = true;
+
+  Map<String, dynamic> toJson() => {'seat': seat.name, 'round': round, 'text': text, 'error': error};
+
+  static LiveEntry fromJson(Map<String, dynamic> j) {
+    final seat = MemberId.values.firstWhere((m) => m.name == j['seat'], orElse: () => MemberId.engineer);
+    return LiveEntry(seat: seat, round: (j['round'] as num?)?.toInt() ?? 1)
+      ..text = '${j['text'] ?? ''}'
+      ..error = j['error'] as String?
+      ..pending = false;
+  }
+}
+
+/// طلب تعديل من المستخدم بعد الخلاصة، ورد الرئيس عليه.
+class LiveRevision {
+  LiveRevision({required this.request, this.summary = '', this.pending = true, this.error});
+  final String request;
+  String summary;
+  bool pending;
+  String? error;
+
+  Map<String, dynamic> toJson() => {'request': request, 'summary': summary, 'error': error};
+  static LiveRevision fromJson(Map<String, dynamic> j) => LiveRevision(
+        request: '${j['request'] ?? ''}',
+        summary: '${j['summary'] ?? ''}',
+        pending: false,
+        error: j['error'] as String?,
+      );
 }
 
 const Map<MemberId, String> _roles = {
@@ -51,30 +80,65 @@ const String _house =
     'اكتب بالعربية الفصحى المبسطة، بإيجاز ووضوح، بلا مقدمات ولا مجاملات. '
     'لا تذكر اسمك كنموذج أو اسم شركتك.';
 
-/// جلسة حقيقية: جولة آراء، ثم جولة تصحيح، ثم خلاصة الرئيس.
+String _newId() {
+  final r = Random();
+  final t = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+  final s = List.generate(6, (_) => r.nextInt(36).toRadixString(36)).join();
+  return '$t$s';
+}
+
+/// جلسة حقيقية: جولة آراء، ثم جولة تصحيح، ثم خلاصة الرئيس، ثم تعديلات.
+/// تُحفظ في السيرفر بعد كل خلاصة أو تعديل، وتُفتح لاحقاً من «المشاريع».
 class LiveSession extends ChangeNotifier {
-  LiveSession({LiveController? api}) : _api = api ?? LiveController.instance;
+  LiveSession({LiveController? api, String? id})
+      : _api = api ?? LiveController.instance,
+        id = id ?? _newId();
 
   final LiveController _api;
+  final String id;
 
+  DateTime createdAt = DateTime.now();
   String idea = '';
   LiveOutput output = LiveOutput.plan;
   LivePhase phase = LivePhase.idle;
   final List<LiveEntry> entries = [];
+  final List<String> notes = [];
+  final List<LiveRevision> revisions = [];
   String summary = '';
   bool summaryCut = false;
   String? error;
   int costMicros = 0;
+  bool saved = false;
   bool _disposed = false;
 
+  String get title {
+    final t = idea.trim().split('\n').first.trim();
+    if (t.isEmpty) return 'جلسة جديدة';
+    return t.length > 48 ? '${t.substring(0, 48)}…' : t;
+  }
+
+  /// آخر خلاصة معتمدة (بعد آخر تعديل ناجح).
+  String get latestSummary {
+    for (final r in revisions.reversed) {
+      if (!r.pending && r.error == null && r.summary.isNotEmpty) return r.summary;
+    }
+    return summary;
+  }
+
   bool get running =>
-      phase == LivePhase.round1 || phase == LivePhase.round2 || phase == LivePhase.summary;
+      phase == LivePhase.round1 ||
+      phase == LivePhase.round2 ||
+      phase == LivePhase.summary ||
+      phase == LivePhase.revising;
+
+  bool get discussing => phase == LivePhase.round1 || phase == LivePhase.round2;
 
   String get phaseLabel => switch (phase) {
         LivePhase.idle => '',
         LivePhase.round1 => 'الجولة ١: الأعضاء يكتبون آراءهم',
         LivePhase.round2 => 'الجولة ٢: التصحيح والاتفاق',
         LivePhase.summary => 'رئيس الجلسة يكتب الخلاصة',
+        LivePhase.revising => 'رئيس الجلسة يطبّق تعديلك',
         LivePhase.done => 'اكتملت الجلسة',
         LivePhase.failed => 'توقفت الجلسة',
       };
@@ -82,6 +146,7 @@ class LiveSession extends ChangeNotifier {
   /// تعذّرت الخلاصة بعد اكتمال الجولات: يمكن إعادتها وحدها.
   bool get canRetrySummary =>
       phase == LivePhase.failed &&
+      summary.isEmpty &&
       entries.where((e) => e.round == 1 && e.error == null && !e.pending).length >= 2;
 
   void _notify() {
@@ -94,8 +159,73 @@ class LiveSession extends ChangeNotifier {
     super.dispose();
   }
 
+  // ---- حفظ واسترجاع ---------------------------------------------------------
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'v': 1,
+        'title': title,
+        'idea': idea,
+        'output': output.name,
+        'createdAt': createdAt.toIso8601String(),
+        'status': phase == LivePhase.done ? 'done' : 'stopped',
+        'entries': [for (final e in entries.where((e) => !e.pending)) e.toJson()],
+        'notes': notes,
+        'summary': summary,
+        'summaryCut': summaryCut,
+        'revisions': [for (final r in revisions.where((r) => !r.pending)) r.toJson()],
+        'costMicros': costMicros,
+      };
+
+  static LiveSession fromJson(Map<String, dynamic> j) {
+    final s = LiveSession(id: '${j['id']}');
+    s.idea = '${j['idea'] ?? ''}';
+    s.output = LiveOutput.values.firstWhere((o) => o.name == j['output'], orElse: () => LiveOutput.plan);
+    s.createdAt = DateTime.tryParse('${j['createdAt']}') ?? DateTime.now();
+    for (final e in (j['entries'] as List? ?? const [])) {
+      if (e is Map<String, dynamic>) s.entries.add(LiveEntry.fromJson(e));
+    }
+    for (final n in (j['notes'] as List? ?? const [])) {
+      s.notes.add('$n');
+    }
+    s.summary = '${j['summary'] ?? ''}';
+    s.summaryCut = j['summaryCut'] == true;
+    for (final r in (j['revisions'] as List? ?? const [])) {
+      if (r is Map<String, dynamic>) s.revisions.add(LiveRevision.fromJson(r));
+    }
+    s.costMicros = (j['costMicros'] as num?)?.toInt() ?? 0;
+    s.phase = s.summary.isNotEmpty ? LivePhase.done : LivePhase.failed;
+    s.saved = true;
+    return s;
+  }
+
+  Future<void> save() async {
+    try {
+      await _api.saveSession(toJson());
+      saved = true;
+      LiveHub.instance.upsert(this);
+      _notify();
+    } catch (_) {
+      // الحفظ يُعاد مع التعديل التالي؛ لا نوقف المستخدم.
+    }
+  }
+
+  // ---- النقاش -----------------------------------------------------------------
+
   String get _task =>
       'نوع المخرج المطلوب: ${output.label}.\n\nفكرة المستخدم:\n${idea.trim()}';
+
+  String get _notesBlock => notes.isEmpty
+      ? ''
+      : '\n\nمداخلات المستخدم أثناء النقاش (التزم بها):\n${notes.map((n) => '- $n').join('\n')}';
+
+  /// مداخلة من المستخدم أثناء النقاش: تدخل في الجولة التالية والخلاصة.
+  void addNote(String text) {
+    final t = text.trim();
+    if (t.isEmpty || !running) return;
+    notes.add(t);
+    _notify();
+  }
 
   Future<void> _seat(LiveEntry e, List<Map<String, String>> messages, String kind) async {
     try {
@@ -113,15 +243,15 @@ class LiveSession extends ChangeNotifier {
 
   String _transcript(int round) {
     final b = StringBuffer();
-    for (final e in entries.where((x) => x.round == round && x.error == null)) {
-      b.writeln('— ${_title(e.seat)}:');
+    for (final e in entries.where((x) => x.round == round && x.error == null && !x.pending)) {
+      b.writeln('— ${seatTitle(e.seat)}:');
       b.writeln(e.text);
       b.writeln();
     }
     return b.toString();
   }
 
-  static String _title(MemberId id) => switch (id) {
+  static String seatTitle(MemberId id) => switch (id) {
         MemberId.chair => 'رئيس الجلسة',
         MemberId.engineer => 'المهندس',
         MemberId.practical => 'العملي',
@@ -133,10 +263,13 @@ class LiveSession extends ChangeNotifier {
   Future<void> start() async {
     if (running || idea.trim().length < 10) return;
     entries.clear();
+    notes.clear();
+    revisions.clear();
     summary = '';
     summaryCut = false;
     error = null;
     costMicros = 0;
+    createdAt = DateTime.now();
 
     // الجولة ١: كل عضو يكتب رأيه بالتوازي.
     phase = LivePhase.round1;
@@ -171,13 +304,14 @@ class LiveSession extends ChangeNotifier {
     ];
     entries.addAll(r2);
     _notify();
+    final notesNow = _notesBlock;
     await Future.wait([
       for (final e in r2)
         _seat(e, [
           {'role': 'system', 'content': '$_house\n${_roles[e.seat]}'},
           {
             'role': 'user',
-            'content': '$_task\n\nآراء الأعضاء في الجولة الأولى:\n$round1\n'
+            'content': '$_task$notesNow\n\nآراء الأعضاء في الجولة الأولى:\n$round1\n'
                 'من زاويتك: ما الذي توافق عليه، وما الخطأ أو الناقص الذي يجب تصحيحه؟ '
                 'في 100 كلمة كحد أقصى. إن لم يكن لديك تصحيح فاكتب «أوافق» مع سبب قصير.',
           },
@@ -207,7 +341,7 @@ class LiveSession extends ChangeNotifier {
           },
           {
             'role': 'user',
-            'content': '$_task\n\nالجولة الأولى:\n$round1\nجولة التصحيح:\n${_transcript(2)}\n'
+            'content': '$_task$_notesBlock\n\nالجولة الأولى:\n$round1\nجولة التصحيح:\n${_transcript(2)}\n'
                 'اكتب الخلاصة النهائية بهذه الأقسام وبعناوين واضحة: '
                 'الخلاصة في سطرين، الخطة أو المحتوى الأساسي، الأرقام والتكاليف التقديرية، '
                 'المخاطر وطريقة تجنبها، الخطوة التالية. لا تكتب كوداً.',
@@ -226,5 +360,148 @@ class LiveSession extends ChangeNotifier {
       phase = LivePhase.failed;
     }
     _notify();
+    if (phase == LivePhase.done) await save();
+  }
+
+  /// طلب تعديل على الخلاصة: الرئيس يعيد كتابتها كاملة مع التعديل.
+  Future<void> revise(String request) async {
+    final req = request.trim();
+    if (req.isEmpty || running || latestSummary.isEmpty) return;
+    final rev = LiveRevision(request: req);
+    final base = latestSummary;
+    revisions.add(rev);
+    error = null;
+    phase = LivePhase.revising;
+    _notify();
+    try {
+      final r = await _api.speak(
+        seat: MemberId.chair.name,
+        kind: 'chair',
+        messages: [
+          {
+            'role': 'system',
+            'content': '$_house\nأنت «رئيس الجلسة». المستخدم يطلب تعديلاً على الخلاصة المعتمدة. '
+                'طبّق التعديل بدقة، وأعد كتابة الخلاصة كاملة بنفس الأقسام، ولا تحذف ما لم يُطلب حذفه.',
+          },
+          {
+            'role': 'user',
+            'content': '$_task\n\nالخلاصة الحالية:\n$base\n\nطلب التعديل:\n$req',
+          },
+        ],
+      );
+      rev.summary = r.text;
+      costMicros += r.costMicros;
+    } on LiveException catch (err) {
+      rev.error = err.message;
+    } catch (_) {
+      rev.error = 'تعذّر تطبيق التعديل';
+    }
+    rev.pending = false;
+    phase = LivePhase.done;
+    _notify();
+    if (rev.error == null) await save();
+  }
+}
+
+/// ملخص جلسة محفوظة (لقائمة المشاريع).
+class SessionMeta {
+  const SessionMeta({
+    required this.id,
+    required this.title,
+    required this.output,
+    required this.createdAt,
+    required this.costMicros,
+    required this.status,
+  });
+
+  factory SessionMeta.fromJson(Map<String, dynamic> j) => SessionMeta(
+        id: '${j['id']}',
+        title: '${j['title'] ?? 'جلسة'}',
+        output: LiveOutput.values.firstWhere((o) => o.name == j['output'], orElse: () => LiveOutput.plan),
+        createdAt: DateTime.tryParse('${j['createdAt']}') ?? DateTime.now(),
+        costMicros: (j['costMicros'] as num?)?.toInt() ?? 0,
+        status: '${j['status'] ?? 'done'}',
+      );
+
+  final String id;
+  final String title;
+  final LiveOutput output;
+  final DateTime createdAt;
+  final int costMicros;
+  final String status;
+}
+
+/// الجلسة الحالية في تبويب الطاولة + قائمة الجلسات المحفوظة.
+class LiveHub extends ChangeNotifier {
+  LiveHub._();
+  static final LiveHub instance = LiveHub._();
+
+  LiveSession _current = LiveSession();
+  LiveSession get current => _current;
+
+  List<SessionMeta> sessions = const [];
+  bool loading = false;
+  String? error;
+
+  // الجلسة السابقة لا تُتلف هنا: قد تكون واجهة ما زالت تستمع لها حتى إعادة البناء،
+  // وإن كانت تعمل فستكمل وتُحفظ في الخلفية.
+  void _swap(LiveSession s) {
+    _current = s;
+    notifyListeners();
+  }
+
+  /// جلسة جديدة فارغة (إن كانت الحالية تعمل تبقى تعمل في الخلفية حتى تُحفظ).
+  void newSession() => _swap(LiveSession());
+
+  Future<void> loadList() async {
+    loading = true;
+    error = null;
+    notifyListeners();
+    try {
+      final rows = await LiveController.instance.listSessions();
+      sessions = [for (final r in rows) SessionMeta.fromJson(r)]
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    } on LiveException catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = 'تعذّر تحميل الجلسات';
+    }
+    loading = false;
+    notifyListeners();
+  }
+
+  /// يفتح جلسة محفوظة في تبويب الطاولة. يعيد false إن تعذّر.
+  Future<bool> open(String id) async {
+    if (_current.id == id) return true;
+    try {
+      final j = await LiveController.instance.getSession(id);
+      _swap(LiveSession.fromJson(j));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// تحديث القائمة محلياً بعد الحفظ بدل إعادة التحميل من السيرفر.
+  void upsert(LiveSession s) {
+    final meta = SessionMeta(
+      id: s.id,
+      title: s.title,
+      output: s.output,
+      createdAt: s.createdAt,
+      costMicros: s.costMicros,
+      status: s.phase == LivePhase.done ? 'done' : 'stopped',
+    );
+    sessions = [meta, ...sessions.where((x) => x.id != s.id)];
+    notifyListeners();
+  }
+
+  Future<void> delete(String id) async {
+    try {
+      await LiveController.instance.deleteSession(id);
+      sessions = sessions.where((s) => s.id != id).toList();
+      if (_current.id == id) _swap(LiveSession());
+      notifyListeners();
+    } catch (_) {}
   }
 }
