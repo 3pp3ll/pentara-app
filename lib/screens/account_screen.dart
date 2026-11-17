@@ -73,10 +73,6 @@ class AccountScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // ---- الحساب الحقيقي: إنشاء، دخول، تفعيل كود المتجر
-          const LiveAccountCard(),
-          const SizedBox(height: 16),
-
           // ---- بطاقة المستخدم + نص الإحالة (النص يُدار من لوحة التحكم على الويب)
           ListenableBuilder(
             listenable: LiveController.instance,
@@ -116,6 +112,10 @@ class AccountScreen extends StatelessWidget {
             },
           ),
 
+
+          // ---- الحساب الحقيقي: إنشاء، دخول، تفعيل كود المتجر
+          const LiveAccountCard(),
+          const SizedBox(height: 16),
 
           // ---- الباقات
           Text('الباقات', style: AppTypography.title.copyWith(color: c.ink)),

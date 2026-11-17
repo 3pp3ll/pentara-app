@@ -144,6 +144,27 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     _syncTableVisibility();
   }
 
+  /// شاشة عريضة (الموقع على الكمبيوتر).
+  bool _wide(BuildContext context) => MediaQuery.sizeOf(context).width >= 900;
+
+  Widget _content() => Column(
+        children: [
+          const UpdateBanner(),
+          Expanded(
+            child: IndexedStack(
+              index: _index,
+              children: [
+                for (var i = 0; i < _tabCount; i++)
+                  TickerMode(
+                    enabled: i == _index,
+                    child: _screen(i),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+
   void _back() {
     while (_history.isNotEmpty) {
       final prev = _history.removeLast();
@@ -247,29 +268,30 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
         backgroundColor: c.bg,
         body: SafeArea(
           bottom: false,
-          child: Column(
-            children: [
-              const UpdateBanner(),
-              Expanded(
-                child: IndexedStack(
-                  index: _index,
+          child: _wide(context)
+              // الكمبيوتر: شريط جانبي، والمحتوى في عمود مريح للقراءة وسط الصفحة.
+              ? Row(
                   children: [
-                    for (var i = 0; i < _tabCount; i++)
-                      TickerMode(
-                        enabled: i == _index,
-                        child: _screen(i),
+                    SideNav(currentIndex: _index, onTap: _select),
+                    Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 860),
+                          child: _content(),
+                        ),
                       ),
+                    ),
                   ],
-                ),
-              ),
-            ],
-          ),
+                )
+              : _content(),
         ),
         // SafeArea السفلية داخل BottomNav مرة واحدة.
-        bottomNavigationBar: BottomNav(
-          currentIndex: _index,
-          onTap: _select,
-        ),
+        bottomNavigationBar: _wide(context)
+            ? null
+            : BottomNav(
+                currentIndex: _index,
+                onTap: _select,
+              ),
       ),
       ),
     );

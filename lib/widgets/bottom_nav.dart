@@ -55,6 +55,42 @@ class BottomNav extends StatelessWidget {
   }
 }
 
+/// شريط جانبي لنسخة الكمبيوتر (الشاشات العريضة): نفس العناصر عمودياً
+/// على جانب البداية (يمين في العربية).
+class SideNav extends StatelessWidget {
+  const SideNav({super.key, required this.currentIndex, required this.onTap});
+
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      width: 112,
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: BorderDirectional(end: BorderSide(color: c.border, width: 1)),
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            Text('بنتارا', style: AppTypography.title.copyWith(color: c.goldText)),
+            const SizedBox(height: 24),
+            for (var i = 0; i < BottomNav._items.length; i++)
+              _NavItem(
+                spec: BottomNav._items[i],
+                selected: i == currentIndex,
+                onTap: () => onTap(i),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 enum _NavKind { home, table, projects, lab, account }
 
 class _NavSpec {
