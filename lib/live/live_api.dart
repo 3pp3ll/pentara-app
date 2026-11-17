@@ -102,11 +102,18 @@ class LiveController extends ChangeNotifier {
 
   /// اسم الزائر قبل التسجيل: يُختار عشوائياً مرة ويُحفظ في الجهاز.
   static const List<String> guestNames = [
-    'سلمان', 'نورة', 'فيصل', 'ريم', 'تركي', 'لمى', 'خالد', 'جود', 'ماجد', 'دانة',
-    'بدر', 'هيا', 'راكان', 'سارة', 'عمر', 'لين', 'يزيد', 'غلا', 'مشاري', 'رهف',
-    'سعود', 'شهد', 'نواف', 'جنى', 'عبدالعزيز', 'ليان', 'طلال', 'مها', 'وليد', 'أروى',
+    'المبرمج المثالي', 'المطوّر الذكي', 'صانع الأفكار', 'رائد الأعمال', 'المبدع الطموح',
+    'صاحب الرؤية', 'المخطط البارع', 'المحلل الذكي', 'المبتكر', 'صانع الفرق',
+    'المستثمر الواعي', 'قائد المشروع', 'المصمم الملهم', 'الباحث الشغوف', 'صانع النجاح',
+    'المهندس المبدع', 'المسوّق الذكي', 'المؤسس الطموح', 'العقل المدبّر', 'صانع المستقبل',
+    'المنفّذ المحترف', 'المخترع', 'المفكر الاستراتيجي', 'صاحب المبادرة', 'المطوّر المحترف',
+    'بطل الأفكار', 'الرائد الملهم', 'صانع التطبيقات', 'المحلل الاستراتيجي', 'المبدع الذكي',
   ];
   static const String _guestNameKey = 'pentara-guest-name';
+  static const String _deviceKey = 'pentara-device';
+
+  /// معرّف هذا الجهاز: الحساب العادي يعمل على أول جهاز سجّل منه فقط.
+  String _device = '';
   String guestName = guestNames[Random().nextInt(guestNames.length)];
 
   /// إحصاءات عامة لكل المستخدمين (المختبر وملخص المشاريع قبل الدخول).
@@ -200,6 +207,12 @@ class LiveController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       _login = prefs.getString(_prefsKey);
+      _device = prefs.getString(_deviceKey) ?? '';
+      if (_device.isEmpty) {
+        final r = Random.secure();
+        _device = List.generate(24, (_) => r.nextInt(16).toRadixString(16)).join();
+        await prefs.setString(_deviceKey, _device);
+      }
       final g = prefs.getString(_guestNameKey);
       if (g != null && g.isNotEmpty) {
         guestName = g;
@@ -259,14 +272,15 @@ class LiveController extends ChangeNotifier {
   /// حساب جديد (يحوّل الزائر إلى حساب ويحتفظ بجلسته).
   Future<void> signup(String name, String email, String password) => _run(() async {
         await _accept(await _send('POST', '/api/signup',
-            body: {'name': name.trim(), 'email': email.trim(), 'password': password}));
+            body: {'name': name.trim(), 'email': email.trim(), 'password': password, 'device': _device}));
       }, forgetOn401: false);
 
   /// دخول ببريد وكلمة مرور (جلسة الزائر تنتقل للحساب).
   Future<int> signin(String email, String password) async {
     var moved = 0;
     await _run(() async {
-      final data = await _send('POST', '/api/signin', body: {'email': email.trim(), 'password': password});
+      final data = await _send('POST', '/api/signin',
+          body: {'email': email.trim(), 'password': password, 'device': _device});
       moved = (data['moved'] as num?)?.toInt() ?? 0;
       await _accept(data);
     }, forgetOn401: false);

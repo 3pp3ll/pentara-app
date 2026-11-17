@@ -145,6 +145,11 @@ class _LiveAccountCardState extends State<LiveAccountCard> {
             expand: true,
             onTap: live.busy ? null : _submitAuth,
           ),
+          const SizedBox(height: 8),
+          Text(
+            'الحساب يعمل على جهاز واحد (أول جهاز تسجّل منه). لنقله لجهاز آخر تواصل مع الدعم.',
+            style: AppTypography.caption.copyWith(color: c.inkMuted),
+          ),
         ],
         if (live.error != null) ...[
           const SizedBox(height: 8),
