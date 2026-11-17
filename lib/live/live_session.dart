@@ -42,6 +42,20 @@ class LiveEntry {
   }
 }
 
+/// ملف مرفق: اسمه ونصه (حد أقصى للطول حتى لا ترتفع التكلفة).
+class LiveAttachment {
+  const LiveAttachment({required this.name, required this.text});
+  final String name;
+  final String text;
+
+  static const int maxChars = 12000;
+  static const int maxTotal = 30000;
+
+  Map<String, dynamic> toJson() => {'name': name, 'text': text};
+  static LiveAttachment fromJson(Map<String, dynamic> j) =>
+      LiveAttachment(name: '${j['name'] ?? 'ملف'}', text: '${j['text'] ?? ''}');
+}
+
 /// طلب تعديل من المستخدم بعد الخلاصة، ورد الرئيس عليه.
 class LiveRevision {
   LiveRevision({required this.request, this.summary = '', this.pending = true, this.error});
@@ -108,6 +122,10 @@ class LiveSession extends ChangeNotifier {
   LivePhase phase = LivePhase.idle;
   final List<LiveEntry> entries = [];
   final List<String> notes = [];
+
+  /// ملفات ومصادر يرفقها المستخدم مع الفكرة (نصوص تُقرأ مع الطلب).
+  final List<LiveAttachment> attachments = [];
+  String sources = '';
   final List<LiveRevision> revisions = [];
   String summary = '';
   bool summaryCut = false;
@@ -174,6 +192,8 @@ class LiveSession extends ChangeNotifier {
         'status': phase == LivePhase.done ? 'done' : 'stopped',
         'entries': [for (final e in entries.where((e) => !e.pending)) e.toJson()],
         'notes': notes,
+        'sources': sources,
+        'attachments': [for (final a in attachments) a.toJson()],
         'summary': summary,
         'summaryCut': summaryCut,
         'revisions': [for (final r in revisions.where((r) => !r.pending)) r.toJson()],
@@ -187,6 +207,10 @@ class LiveSession extends ChangeNotifier {
     s.createdAt = DateTime.tryParse('${j['createdAt']}') ?? DateTime.now();
     for (final e in (j['entries'] as List? ?? const [])) {
       if (e is Map<String, dynamic>) s.entries.add(LiveEntry.fromJson(e));
+    }
+    s.sources = '${j['sources'] ?? ''}';
+    for (final a in (j['attachments'] as List? ?? const [])) {
+      if (a is Map<String, dynamic>) s.attachments.add(LiveAttachment.fromJson(a));
     }
     for (final n in (j['notes'] as List? ?? const [])) {
       s.notes.add('$n');
@@ -215,8 +239,17 @@ class LiveSession extends ChangeNotifier {
 
   // ---- النقاش -----------------------------------------------------------------
 
-  String get _task =>
-      'نوع المخرج المطلوب: ${output.label}.\n\nفكرة المستخدم:\n${idea.trim()}';
+  String get _task {
+    final b = StringBuffer('نوع المخرج المطلوب: ${output.label}.\n\nفكرة المستخدم:\n${idea.trim()}');
+    if (sources.trim().isNotEmpty) b.write('\n\nمصادر ذكرها المستخدم (روابط أو مراجع):\n${sources.trim()}');
+    if (attachments.isNotEmpty) {
+      b.write('\n\nملفات أرفقها المستخدم (اعتمد عليها):');
+      for (final a in attachments) {
+        b.write('\n--- ${a.name} ---\n${a.text}');
+      }
+    }
+    return b.toString();
+  }
 
   String get _notesBlock => notes.isEmpty
       ? ''

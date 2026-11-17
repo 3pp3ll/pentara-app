@@ -24,6 +24,7 @@ class LiveUser {
     this.name = '',
     this.email = '',
     this.guest = false,
+    this.role = 'user',
     required this.plan,
     required this.planName,
     required this.balanceMicros,
@@ -37,6 +38,7 @@ class LiveUser {
         name: '${j['name'] ?? ''}',
         email: '${j['email'] ?? ''}',
         guest: j['guest'] == true,
+        role: '${j['role'] ?? 'user'}',
         plan: '${j['plan'] ?? 'none'}',
         planName: '${j['planName'] ?? ''}',
         balanceMicros: (j['balanceMicros'] as num?)?.toInt() ?? 0,
@@ -49,7 +51,11 @@ class LiveUser {
   final String name;
   final String email;
   final bool guest;
+  final String role;
   final String plan;
+
+  /// المالك أو من منحه المالك صلاحية مشرف.
+  bool get isAdmin => isOwner || role == 'admin';
   final String planName;
   final int balanceMicros;
   final int spentMicros;
@@ -63,6 +69,7 @@ class LiveUser {
         name: name,
         email: email,
         guest: guest,
+        role: role,
         plan: plan,
         planName: planName,
         balanceMicros: balance,
@@ -332,6 +339,19 @@ class LiveController extends ChangeNotifier {
       });
 
   Future<void> refresh() => _run(() async => _setUser(await _send('GET', '/api/me')));
+
+  void setReferral(String text, bool visible) {
+    referText = text;
+    referVisible = visible;
+    notifyListeners();
+  }
+
+  // ---- لوحة التحكم داخل التطبيق (للمالك والمشرفين) ----
+  Future<Map<String, dynamic>> adminGet(String action) =>
+      _send('GET', '/api/admin/$action', timeout: const Duration(seconds: 30));
+
+  Future<Map<String, dynamic>> adminPost(String action, Map<String, dynamic> body) =>
+      _send('POST', '/api/admin/$action', body: body, timeout: const Duration(seconds: 30));
 
   Future<void> signOut() async {
     await _forget();

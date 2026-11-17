@@ -7,7 +7,7 @@ import '../data/models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/project_card.dart' show latinFigures;
-import 'admin_screen.dart';
+import '../live/live_admin_screen.dart';
 import '../live/live_account_card.dart';
 import '../live/live_api.dart';
 import '../widgets/share_card.dart';
@@ -129,7 +129,7 @@ class AccountScreen extends StatelessWidget {
             listenable: LiveController.instance,
             builder: (context, _) {
               final live = LiveController.instance;
-              if (!live.isRegistered || !(live.user?.isOwner ?? false)) {
+              if (!live.isRegistered || !(live.user?.isAdmin ?? false)) {
                 return const SizedBox.shrink();
               }
               return const Padding(
@@ -632,7 +632,7 @@ class _AdminEntry extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const AdminScreen()),
+          MaterialPageRoute<void>(builder: (_) => const LiveAdminScreen()),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 64),

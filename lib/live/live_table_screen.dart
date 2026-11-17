@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -29,6 +32,7 @@ class LiveTableScreen extends StatefulWidget {
 class _LiveTableScreenState extends State<LiveTableScreen> {
   final TextEditingController _idea = TextEditingController();
   final TextEditingController _note = TextEditingController();
+  final TextEditingController _sources = TextEditingController();
   final ScrollController _scroll = ScrollController();
   String _shownId = '';
 
@@ -47,6 +51,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     hub.removeListener(_syncFields);
     _idea.dispose();
     _note.dispose();
+    _sources.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -59,6 +64,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     if (_shownId == _s.id) return;
     _shownId = _s.id;
     _idea.text = _s.idea;
+    _sources.text = _s.sources;
     _note.clear();
   }
 
@@ -92,6 +98,37 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     } else if (s.phase == LivePhase.failed) {
       _toast('توقفت الجلسة: ${s.error ?? ''}');
     }
+  }
+
+  /// إرفاق ملفات نصية (txt, md, csv, json, html…) تُقرأ مع الفكرة.
+  Future<void> _pickFiles() async {
+    final s = _s;
+    final res = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      withData: true,
+      type: FileType.custom,
+      allowedExtensions: const ['txt', 'md', 'csv', 'json', 'html', 'xml', 'tsv', 'log', 'dart', 'js', 'css', 'yaml'],
+    );
+    if (res == null || !mounted) return;
+    var used = s.attachments.fold<int>(0, (a, x) => a + x.text.length);
+    var skipped = 0;
+    for (final f in res.files) {
+      final bytes = f.bytes;
+      if (bytes == null) continue;
+      var text = utf8.decode(bytes, allowMalformed: true).trim();
+      if (text.isEmpty) continue;
+      final room = LiveAttachment.maxTotal - used;
+      if (room <= 500) {
+        skipped++;
+        continue;
+      }
+      final cap = room < LiveAttachment.maxChars ? room : LiveAttachment.maxChars;
+      if (text.length > cap) text = '${text.substring(0, cap)}\n…(اختُصر الملف)';
+      s.attachments.add(LiveAttachment(name: f.name, text: text));
+      used += text.length;
+    }
+    setState(() {});
+    if (skipped > 0) _toast('تجاوزت الحد المسموح للمرفقات؛ لم يُضف $skipped ملف');
   }
 
   Future<void> _send() async {
@@ -346,6 +383,42 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
           style: AppTypography.body.copyWith(color: c.ink),
           decoration: _fieldDecoration(context, 'اشرح فكرتك أو مشروعك بالتفصيل…'),
         ),
+        const SizedBox(height: 10),
+        // ملفات ومصادر: يقرؤها الأعضاء مع الفكرة.
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _pickFiles,
+              icon: Icon(Icons.attach_file_rounded, size: 18, color: c.goldText),
+              label: Text('إرفاق ملفات', style: AppTypography.label.copyWith(color: c.goldText)),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: c.goldLine),
+                shape: const StadiumBorder(),
+                minimumSize: const Size(44, 44),
+              ),
+            ),
+            for (final a in s.attachments)
+              InputChip(
+                label: Text(a.name, overflow: TextOverflow.ellipsis),
+                labelStyle: AppTypography.caption.copyWith(color: c.ink),
+                backgroundColor: c.surfaceSoft,
+                side: BorderSide(color: c.border),
+                onDeleted: () => setState(() => s.attachments.remove(a)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _sources,
+          minLines: 1,
+          maxLines: 4,
+          onChanged: (v) => s.sources = v,
+          style: AppTypography.body.copyWith(color: c.ink),
+          decoration: _fieldDecoration(context, 'مصادر (اختياري): روابط أو مراجع أو ملاحظات…'),
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -400,6 +473,31 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
           ),
           const SizedBox(height: 6),
           Text(s.idea, style: AppTypography.body.copyWith(color: c.ink)),
+          if (s.attachments.isNotEmpty || s.sources.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final a in s.attachments)
+                  Chip(
+                    avatar: Icon(Icons.description_outlined, size: 16, color: c.goldText),
+                    label: Text(a.name),
+                    labelStyle: AppTypography.caption.copyWith(color: c.ink),
+                    backgroundColor: c.surface,
+                    side: BorderSide(color: c.border),
+                  ),
+                if (s.sources.trim().isNotEmpty)
+                  Chip(
+                    avatar: Icon(Icons.link_rounded, size: 16, color: c.goldText),
+                    label: const Text('مصادر'),
+                    labelStyle: AppTypography.caption.copyWith(color: c.ink),
+                    backgroundColor: c.surface,
+                    side: BorderSide(color: c.border),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
