@@ -6,6 +6,7 @@ import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
 import 'live_session.dart';
+import 'scroll_top.dart';
 
 /// «المشاريع»: جلساتك الحقيقية المحفوظة في السيرفر. الضغط يفتحها في الطاولة.
 class LiveProjectsScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class LiveProjectsScreen extends StatefulWidget {
 
 class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
   final TextEditingController _q = TextEditingController();
+  final ScrollController _scroll = ScrollController();
   LiveOutput? _filter;
   bool _requested = false;
 
@@ -43,6 +45,7 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
   void dispose() {
     LiveController.instance.removeListener(_maybeLoad);
     _q.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -123,10 +126,13 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
             return q.isEmpty || m.title.contains(q);
           }).toList();
 
-          return RefreshIndicator(
+          return Stack(
+            children: [
+              RefreshIndicator(
             color: c.goldLine,
             onRefresh: hub.loadList,
             child: ListView(
+              controller: _scroll,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
               children: [
@@ -208,6 +214,9 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                 ],
               ],
             ),
+              ),
+              ScrollTopButton(controller: _scroll),
+            ],
           );
         },
       ),

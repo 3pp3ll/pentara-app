@@ -12,6 +12,7 @@ import 'live_account_card.dart';
 import 'live_api.dart';
 import 'live_session.dart';
 import 'rich_text_view.dart';
+import 'scroll_top.dart';
 
 /// الطاولة الحقيقية: المستخدم يكتب فكرته، والأعضاء الخمسة يتناقشون عبر السيرفر،
 /// ويستطيع التدخل أثناء النقاش، ثم يكتب رئيس الجلسة الخلاصة ويطبّق التعديلات.
@@ -158,7 +159,9 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
       children: [
         _header(context),
         Expanded(
-          child: ListView(
+          child: Stack(
+            children: [
+              ListView(
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
@@ -216,6 +219,9 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                   ],
                 ],
               ],
+            ],
+              ),
+              ScrollTopButton(controller: _scroll),
             ],
           ),
         ),
@@ -562,13 +568,27 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                 style: AppTypography.caption.copyWith(color: c.inkMuted)),
           ],
           const SizedBox(height: 12),
-          GoldButton.secondary(
-            label: 'نسخ الخلاصة',
-            expand: true,
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: text));
-              _toast('نُسخت الخلاصة كاملة');
-            },
+          Row(
+            children: [
+              Expanded(
+                child: GoldButton.secondary(
+                  label: 'نسخ',
+                  expand: true,
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: text));
+                    _toast('نُسخت الخلاصة كاملة');
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GoldButton.secondary(
+                  label: 'حفظ كملف',
+                  expand: true,
+                  onTap: () => exportText(context, _s.title, text),
+                ),
+              ),
+            ],
           ),
         ],
       ),

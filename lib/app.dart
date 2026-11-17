@@ -128,10 +128,29 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     _app?.setTableVisible(_index == _tableTabIndex && _resumed);
   }
 
-  void _select(int i) {
+  /// سجل التبويبات: زر الرجوع في الجوال يعود للتبويب السابق، ثم للرئيسية، ثم يخرج.
+  final List<int> _history = [];
+
+  void _select(int i, {bool remember = true}) {
     if (i == _index) return;
+    if (remember) {
+      _history.remove(_index);
+      _history.add(_index);
+      if (_history.length > 10) _history.removeAt(0);
+    }
     setState(() => _index = i);
     _syncTableVisibility();
+  }
+
+  void _back() {
+    while (_history.isNotEmpty) {
+      final prev = _history.removeLast();
+      if (prev != _index) {
+        _select(prev, remember: false);
+        return;
+      }
+    }
+    if (_index != _homeTabIndex) _select(_homeTabIndex, remember: false);
   }
 
   /// تنبيه بألوان صريحة (لا snackBarTheme في الثيم): خلفية ink ونص bg.
@@ -217,7 +236,12 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlay,
-      child: Scaffold(
+      child: PopScope(
+        canPop: _index == _homeTabIndex && _history.isEmpty,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _back();
+        },
+        child: Scaffold(
         backgroundColor: c.bg,
         body: SafeArea(
           bottom: false,
@@ -237,6 +261,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
           currentIndex: _index,
           onTap: _select,
         ),
+      ),
       ),
     );
   }
