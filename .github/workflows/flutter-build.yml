@@ -69,6 +69,7 @@ jobs:
         run: |
           M=android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.INTERNET' "$M" || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' "$M"
+          grep -q 'android.intent.action.VIEW' "$M" || sed -i 's|<application|<queries><intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent></queries>\n    <application|' "$M"
           grep -n 'INTERNET' "$M"
 
       - name: Release signing (fixed key)
@@ -113,10 +114,16 @@ jobs:
       - name: Build Android APK
         run: |
           set -o pipefail
-          flutter build apk --release 2>&1 | tee apk.log || { grep -iE "error" apk.log | head -40 | sed 's/^/::error::/'; exit 1; }
+          flutter build apk --release --build-number=${{ github.run_number }} --dart-define=BUILD=${{ github.run_number }} 2>&1 | tee apk.log || { grep -iE "error" apk.log | head -40 | sed 's/^/::error::/'; exit 1; }
 
       - name: Build Web
-        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+        run: |
+          flutter build web --release --base-href "/${{ github.event.repository.name }}/" --dart-define=BUILD=${{ github.run_number }}
+          # تحديث تلقائي: النسخة ورابط APK بجانب الموقع
+          cp build/app/outputs/flutter-apk/app-release.apk build/web/app.apk
+          OWNER="${{ github.repository_owner }}"; REPO="${{ github.event.repository.name }}"
+          echo "{\"build\": ${{ github.run_number }}, \"apk\": \"https://${OWNER,,}.github.io/${REPO}/app.apk\"}" > build/web/version.json
+          cat build/web/version.json
 
       - uses: actions/upload-artifact@v4
         with:
