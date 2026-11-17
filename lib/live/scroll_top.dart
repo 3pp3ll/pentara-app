@@ -7,8 +7,8 @@ import 'package:share_plus/share_plus.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 
-/// زر «للأعلى» يظهر عندما تطول الصفحة، ويعود بها لأولها بحركة ناعمة.
-/// يوضع داخل Stack فوق القائمة.
+/// سهمان عائمان: «للأعلى» يظهر بعد النزول، و«للأسفل» يظهر إذا بقي محتوى تحت
+/// (مثل نقاش طويل ما زال يُكتب). يوضع داخل Stack فوق القائمة.
 class ScrollTopButton extends StatefulWidget {
   const ScrollTopButton({super.key, required this.controller, this.threshold = 500});
 
@@ -20,12 +20,21 @@ class ScrollTopButton extends StatefulWidget {
 }
 
 class _ScrollTopButtonState extends State<ScrollTopButton> {
-  bool _show = false;
+  bool _up = false;
+  bool _down = false;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_check);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  // المحتوى يطول أثناء النقاش دون تمرير: نعيد الفحص بعد كل إعادة بناء.
+  @override
+  void didUpdateWidget(covariant ScrollTopButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
   }
 
   @override
@@ -35,45 +44,66 @@ class _ScrollTopButtonState extends State<ScrollTopButton> {
   }
 
   void _check() {
-    if (!widget.controller.hasClients) return;
-    final v = widget.controller.offset > widget.threshold;
-    if (v != _show) setState(() => _show = v);
+    if (!mounted || !widget.controller.hasClients) return;
+    final pos = widget.controller.position;
+    final up = pos.pixels > widget.threshold;
+    final down = pos.maxScrollExtent - pos.pixels > widget.threshold;
+    if (up != _up || down != _down) setState(() {
+      _up = up;
+      _down = down;
+    });
+  }
+
+  void _go(bool top) {
+    final pos = widget.controller.position;
+    widget.controller.animateTo(
+      top ? 0 : pos.maxScrollExtent,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     return PositionedDirectional(
       end: 16,
       bottom: 16,
-      child: IgnorePointer(
-        ignoring: !_show,
-        child: AnimatedOpacity(
-          opacity: _show ? 1 : 0,
-          duration: const Duration(milliseconds: 200),
-          child: Semantics(
-            button: true,
-            label: 'العودة لأعلى الصفحة',
-            child: Material(
-              shape: const CircleBorder(),
-              elevation: 3,
-              color: c.surface,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => widget.controller.animateTo(
-                  0,
-                  duration: const Duration(milliseconds: 450),
-                  curve: Curves.easeOutCubic,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _btn(context, _up, Icons.keyboard_arrow_up_rounded, 'العودة لأعلى الصفحة', () => _go(true)),
+          const SizedBox(height: 10),
+          _btn(context, _down, Icons.keyboard_arrow_down_rounded, 'النزول لآخر الصفحة', () => _go(false)),
+        ],
+      ),
+    );
+  }
+
+  Widget _btn(BuildContext context, bool show, IconData icon, String label, VoidCallback tap) {
+    final c = context.colors;
+    return IgnorePointer(
+      ignoring: !show,
+      child: AnimatedOpacity(
+        opacity: show ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        child: Semantics(
+          button: true,
+          label: label,
+          child: Material(
+            shape: const CircleBorder(),
+            elevation: 3,
+            color: c.surface,
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: tap,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: c.goldLine),
                 ),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: c.goldLine),
-                  ),
-                  child: Icon(Icons.keyboard_arrow_up_rounded, color: c.goldText, size: 28),
-                ),
+                child: Icon(icon, color: c.goldText, size: 28),
               ),
             ),
           ),

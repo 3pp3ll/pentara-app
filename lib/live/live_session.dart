@@ -151,12 +151,6 @@ class LiveSession extends ChangeNotifier {
         LivePhase.failed => 'توقفت الجلسة',
       };
 
-  /// تعذّرت الخلاصة بعد اكتمال الجولات: يمكن إعادتها وحدها.
-  bool get canRetrySummary =>
-      phase == LivePhase.failed &&
-      summary.isEmpty &&
-      entries.where((e) => e.round == 1 && e.error == null && !e.pending).length >= 2;
-
   void _notify() {
     if (!_disposed) notifyListeners();
   }
@@ -239,6 +233,7 @@ class LiveSession extends ChangeNotifier {
     try {
       final r = await _api.speak(seat: e.seat.name, kind: kind, messages: messages);
       e.text = r.text.isEmpty ? '(لم يصل رد)' : r.text;
+      e.error = null; // وصل الرد ولو بعد الإيقاف: يُحتفظ به ولا يُعاد طلبه
       costMicros += r.costMicros;
     } on LiveException catch (err) {
       e.error = err.message;
@@ -268,6 +263,55 @@ class LiveSession extends ChangeNotifier {
         MemberId.auditor => 'المدقق',
       };
 
+  bool _stopped = false;
+
+  /// إيقاف الجلسة: ما وصل يبقى محفوظاً، و«استمرار» يكمل من نفس النقطة.
+  void stop() {
+    if (!running) return;
+    _stopped = true;
+    for (final e in entries.where((e) => e.pending)) {
+      e.pending = false;
+      e.error = 'أُوقف قبل الرد';
+    }
+    for (final r in revisions.where((r) => r.pending)) {
+      r.pending = false;
+      r.error = 'أُوقف';
+    }
+    phase = LivePhase.failed;
+    error = 'أوقفت الجلسة. اضغط «استمرار» لتكمل من نفس النقطة.';
+    _notify();
+    save();
+  }
+
+  /// يمكن الاستمرار: جلسة متوقفة (إيقاف، انقطاع، رد متعذّر) لم تُكتب خلاصتها بعد.
+  bool get canResume =>
+      phase == LivePhase.failed && summary.isEmpty && idea.trim().length >= 10 && entries.isNotEmpty;
+
+  List<Map<String, String>> _memberMsgs(LiveEntry e) => [
+        {'role': 'system', 'content': '$_house\n${_roles[e.seat]}'},
+        {
+          'role': 'user',
+          'content': '$_task\n\nاكتب رأيك من زاويتك في 200 كلمة كحد أقصى، بنقاط مرتبة.',
+        },
+      ];
+
+  List<Map<String, String>> _critiqueMsgs(LiveEntry e, String round1) => [
+        {'role': 'system', 'content': '$_house\n${_roles[e.seat]}'},
+        {
+          'role': 'user',
+          'content': '$_task$_notesBlock\n\nآراء الأعضاء في الجولة الأولى:\n$round1\n'
+              'من زاويتك: ما الذي توافق عليه، وما الخطأ أو الناقص الذي يجب تصحيحه؟ '
+              'في 100 كلمة كحد أقصى. إن لم يكن لديك تصحيح فاكتب «أوافق» مع سبب قصير.',
+        },
+      ];
+
+  /// إعادة رد عضو تعذّر (انقطاع أو إيقاف).
+  void _reset(LiveEntry e) {
+    e.error = null;
+    e.text = '';
+    e.pending = true;
+  }
+
   Future<void> start() async {
     if (running || idea.trim().length < 10) return;
     entries.clear();
@@ -279,54 +323,58 @@ class LiveSession extends ChangeNotifier {
     costMicros = 0;
     createdAt = DateTime.now();
     ranHere = true;
+    entries.addAll([for (final s in memberSeats) LiveEntry(seat: s, round: 1)]);
+    await _run();
+  }
 
-    // الجولة ١: كل عضو يكتب رأيه بالتوازي.
-    phase = LivePhase.round1;
-    final r1 = [for (final s in memberSeats) LiveEntry(seat: s, round: 1)];
-    entries.addAll(r1);
-    _notify();
-    await Future.wait([
-      for (final e in r1)
-        _seat(e, [
-          {'role': 'system', 'content': '$_house\n${_roles[e.seat]}'},
-          {
-            'role': 'user',
-            'content': '$_task\n\nاكتب رأيك من زاويتك في 200 كلمة كحد أقصى، بنقاط مرتبة.',
-          },
-        ], 'member'),
-    ]);
-    if (_disposed) return;
+  /// استمرار جلسة متوقفة: يعيد الردود المتعذّرة فقط، ثم يكمل ما بعدها.
+  Future<void> resume() async {
+    if (!canResume) return;
+    await _run();
+  }
+
+  Future<void> _run() async {
+    _stopped = false;
+    error = null;
+
+    // الجولة ١: كل عضو يكتب رأيه بالتوازي (أو من تعذّر ردّه فقط عند الاستمرار).
+    final r1 = entries.where((e) => e.round == 1).toList();
+    final todo1 = r1.where((e) => e.error != null || e.text.isEmpty).toList();
+    if (todo1.isNotEmpty) {
+      phase = LivePhase.round1;
+      for (final e in todo1) {
+        _reset(e);
+      }
+      _notify();
+      await Future.wait([for (final e in todo1) _seat(e, _memberMsgs(e), 'member')]);
+      if (_disposed || _stopped) return;
+    }
     final ok1 = r1.where((e) => e.error == null).length;
     if (ok1 < 2) {
       phase = LivePhase.failed;
       error = r1.firstWhere((e) => e.error != null, orElse: () => r1.first).error ??
           'لم تصل ردود كافية';
       _notify();
+      await save();
       return;
     }
 
     // الجولة ٢: كل عضو يقرأ آراء الآخرين ويصحح ويتفق.
-    phase = LivePhase.round2;
     final round1 = _transcript(1);
-    final r2 = [
-      for (final e in r1.where((x) => x.error == null)) LiveEntry(seat: e.seat, round: 2),
-    ];
-    entries.addAll(r2);
-    _notify();
-    final notesNow = _notesBlock;
-    await Future.wait([
-      for (final e in r2)
-        _seat(e, [
-          {'role': 'system', 'content': '$_house\n${_roles[e.seat]}'},
-          {
-            'role': 'user',
-            'content': '$_task$notesNow\n\nآراء الأعضاء في الجولة الأولى:\n$round1\n'
-                'من زاويتك: ما الذي توافق عليه، وما الخطأ أو الناقص الذي يجب تصحيحه؟ '
-                'في 100 كلمة كحد أقصى. إن لم يكن لديك تصحيح فاكتب «أوافق» مع سبب قصير.',
-          },
-        ], 'critique'),
-    ]);
-    if (_disposed) return;
+    final have2 = {for (final e in entries.where((e) => e.round == 2)) e.seat};
+    for (final e in r1.where((x) => x.error == null && !have2.contains(x.seat))) {
+      entries.add(LiveEntry(seat: e.seat, round: 2));
+    }
+    final todo2 = entries.where((e) => e.round == 2 && (e.error != null || e.text.isEmpty)).toList();
+    if (todo2.isNotEmpty) {
+      phase = LivePhase.round2;
+      for (final e in todo2) {
+        _reset(e);
+      }
+      _notify();
+      await Future.wait([for (final e in todo2) _seat(e, _critiqueMsgs(e, round1), 'critique')]);
+      if (_disposed || _stopped) return;
+    }
 
     await writeSummary();
   }
@@ -336,6 +384,7 @@ class LiveSession extends ChangeNotifier {
     if (_disposed || entries.isEmpty) return;
     final round1 = _transcript(1);
     error = null;
+    _stopped = false;
     phase = LivePhase.summary;
     _notify();
     try {
@@ -358,6 +407,7 @@ class LiveSession extends ChangeNotifier {
           },
         ],
       );
+      if (_stopped) return;
       summary = r.text;
       summaryCut = r.cut;
       costMicros += r.costMicros;
@@ -381,6 +431,7 @@ class LiveSession extends ChangeNotifier {
     final base = latestSummary;
     revisions.add(rev);
     error = null;
+    _stopped = false;
     phase = LivePhase.revising;
     _notify();
     try {
@@ -399,6 +450,7 @@ class LiveSession extends ChangeNotifier {
           },
         ],
       );
+      if (_stopped) return;
       rev.summary = r.text;
       costMicros += r.costMicros;
     } on LiveException catch (err) {

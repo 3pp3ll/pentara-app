@@ -243,14 +243,19 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                     const SizedBox(height: 10),
                     const LiveAccountCard(),
                   ],
-                  if (s.canRetrySummary) ...[
+                  if (s.canResume) ...[
                     const SizedBox(height: 12),
                     GoldButton.primary(
-                      label: 'أكمل إلى الخلاصة',
+                      label: '▶  استمرار',
                       expand: true,
                       onTap: () async {
-                        await s.writeSummary();
-                        if (mounted && s.phase == LivePhase.done) _toBottom();
+                        _toBottom();
+                        await s.resume();
+                        if (!mounted) return;
+                        if (s.phase == LivePhase.done) {
+                          _toast('اكتملت الجلسة وحُفظت');
+                          _toBottom();
+                        }
                       },
                     ),
                   ],
@@ -306,14 +311,20 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
               ],
             ),
           ),
-          if (s.phase != LivePhase.idle)
+          if (s.running)
             TextButton.icon(
-              onPressed: s.running ? null : _newSession,
-              icon: Icon(Icons.add_rounded, size: 18, color: s.running ? c.inkMuted : c.goldText),
-              label: Text(
-                'جلسة جديدة',
-                style: AppTypography.label.copyWith(color: s.running ? c.inkMuted : c.goldText),
-              ),
+              onPressed: () {
+                s.stop();
+                _toast('أُوقفت الجلسة. «استمرار» يكملها من نفس النقطة');
+              },
+              icon: const Icon(Icons.stop_circle_rounded, size: 20, color: Color(0xFFA8322E)),
+              label: Text('إيقاف', style: AppTypography.label.copyWith(color: const Color(0xFFA8322E))),
+            )
+          else if (s.phase != LivePhase.idle)
+            TextButton.icon(
+              onPressed: _newSession,
+              icon: Icon(Icons.add_rounded, size: 18, color: c.goldText),
+              label: Text('جلسة جديدة', style: AppTypography.label.copyWith(color: c.goldText)),
             ),
         ],
       ),
