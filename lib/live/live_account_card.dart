@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/glyph.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
@@ -22,16 +22,14 @@ class _LiveAccountCardState extends State<LiveAccountCard> {
   final _email = TextEditingController();
   final _pass = TextEditingController();
   final _code = TextEditingController();
-  final _newPass = TextEditingController();
   bool _signupMode = false;
-  bool _editing = false;
   bool _showPass = false;
 
   LiveController get live => LiveController.instance;
 
   @override
   void dispose() {
-    for (final c in [_name, _email, _pass, _code, _newPass]) {
+    for (final c in [_name, _email, _pass, _code]) {
       c.dispose();
     }
     super.dispose();
@@ -69,33 +67,6 @@ class _LiveAccountCardState extends State<LiveAccountCard> {
       _code.clear();
       _toast('تم تفعيل الباقة');
     }
-  }
-
-  Future<void> _saveEdit() async {
-    final u = live.user;
-    if (u == null) return;
-    FocusScope.of(context).unfocus();
-    final emailChanged = _email.text.trim().toLowerCase() != u.email;
-    await live.updateAccount(
-      name: _name.text.trim(),
-      email: emailChanged ? _email.text.trim() : null,
-      password: (emailChanged || _newPass.text.isNotEmpty) ? _pass.text : null,
-      newPassword: _newPass.text,
-    );
-    if (!mounted || live.error != null) return;
-    _pass.clear();
-    _newPass.clear();
-    setState(() => _editing = false);
-    _toast('حُفظت بياناتك');
-  }
-
-  void _startEdit() {
-    final u = live.user!;
-    _name.text = u.name;
-    _email.text = u.email;
-    _pass.clear();
-    _newPass.clear();
-    setState(() => _editing = true);
   }
 
   @override
@@ -193,77 +164,45 @@ class _LiveAccountCardState extends State<LiveAccountCard> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _balanceTile(context, u),
-        const SizedBox(height: 12),
-        _frame(context, [
-          _infoRow(context, 'رقم الحساب', u.id, latin: true, copy: true),
-          _infoRow(context, 'البريد', u.email.isEmpty ? '—' : u.email, latin: true),
-          const SizedBox(height: 12),
-          Text(
-            u.hasPlan ? 'تجديد أو ترقية: الصق كوداً جديداً' : 'فعّل باقتك: الصق الكود الذي وصلك من المتجر',
-            style: AppTypography.label.copyWith(color: c.inkMuted),
+        const SizedBox(height: 10),
+        // تجديد أو ترقية: بطاقة مضغوطة (الرقم والبريد موجودان فوق).
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: c.goldLine),
           ),
-          const SizedBox(height: 8),
-          _field(context, _code, 'PNT-XXXX-XXXX-XXXX', latin: true),
-          const SizedBox(height: 8),
-          GoldButton.primary(label: 'تفعيل الكود', expand: true, onTap: live.busy ? null : _activate),
-          const SizedBox(height: 4),
-          if (_editing) ...[
-            const SizedBox(height: 12),
-            Divider(color: c.border, height: 1),
-            const SizedBox(height: 12),
-            Text('تعديل بياناتك', style: AppTypography.bodyStrong.copyWith(color: c.ink)),
-            const SizedBox(height: 8),
-            _field(context, _name, 'الاسم'),
-            const SizedBox(height: 8),
-            _field(context, _email, 'البريد الإلكتروني', latin: true, keyboard: TextInputType.emailAddress),
-            const SizedBox(height: 8),
-            _field(context, _newPass, 'كلمة مرور جديدة (اختياري)', obscure: true),
-            const SizedBox(height: 8),
-            _field(context, _pass, 'كلمة المرور الحالية (لتغيير البريد أو كلمة المرور)', obscure: true),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: GoldButton.primary(label: 'حفظ', expand: true, onTap: live.busy ? null : _saveEdit),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GoldButton.secondary(
-                    label: 'إلغاء',
-                    expand: true,
-                    onTap: () => setState(() => _editing = false),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (live.error != null) ...[
-            const SizedBox(height: 8),
-            Text(live.error!, style: AppTypography.label.copyWith(color: const Color(0xFFA8322E))),
-          ],
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!_editing)
-                TextButton(
-                  onPressed: _startEdit,
-                  child: Text('تعديل البيانات', style: AppTypography.label.copyWith(color: c.goldText)),
-                ),
-              TextButton(
-                onPressed: live.busy ? null : live.refresh,
-                child: Text('تحديث الرصيد', style: AppTypography.label.copyWith(color: c.goldText)),
+              Row(
+                children: [
+                  const Glyph(Icons.confirmation_number_rounded, tone: GlyphTone.gold, size: 30),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      u.hasPlan ? 'تجديد أو ترقية: الصق كود الخصم أو الباقة' : 'فعّل باقتك: الصق الكود الذي وصلك',
+                      style: AppTypography.caption.copyWith(color: c.inkMuted),
+                    ),
+                  ),
+                ],
               ),
-              const Spacer(),
-              TextButton(
-                onPressed: () async {
-                  await live.signOut();
-                  LiveHub.instance.sessions = const [];
-                  LiveHub.instance.newSession();
-                },
-                child: Text('خروج', style: AppTypography.label.copyWith(color: c.inkMuted)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _field(context, _code, 'PNT-XXXX-XXXX-XXXX', latin: true, compact: true)),
+                  const SizedBox(width: 8),
+                  GoldButton.primary(label: 'تفعيل', onTap: live.busy ? null : _activate),
+                ],
               ),
+              if (live.error != null) ...[
+                const SizedBox(height: 6),
+                Text(live.error!, style: AppTypography.caption.copyWith(color: const Color(0xFFA8322E))),
+              ],
             ],
           ),
-        ]),
+        ),
       ],
     );
   }
@@ -344,9 +283,10 @@ class _LiveAccountCardState extends State<LiveAccountCard> {
   }
 
   Widget _field(BuildContext context, TextEditingController ctrl, String hint,
-      {bool latin = false, bool obscure = false, TextInputType? keyboard}) {
+      {bool latin = false, bool obscure = false, TextInputType? keyboard, bool compact = false}) {
     final c = context.colors;
-    final base = latin ? latinFigures(AppTypography.body) : AppTypography.body;
+    final base = (latin ? latinFigures(AppTypography.body) : AppTypography.body)
+        .copyWith(fontSize: compact ? 13 : null);
     return TextField(
       controller: ctrl,
       obscureText: obscure && !_showPass,
@@ -357,10 +297,11 @@ class _LiveAccountCardState extends State<LiveAccountCard> {
       style: base.copyWith(color: c.ink),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: AppTypography.label.copyWith(color: c.inkMuted),
+        hintStyle: AppTypography.label.copyWith(color: c.inkMuted, fontSize: compact ? 12 : null),
         filled: true,
         fillColor: c.bg,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        isDense: compact,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: compact ? 10 : 12),
         suffixIcon: obscure
             ? IconButton(
                 tooltip: _showPass ? 'إخفاء' : 'إظهار',
@@ -384,30 +325,233 @@ class _LiveAccountCardState extends State<LiveAccountCard> {
       ),
     );
   }
+}
 
-  Widget _infoRow(BuildContext context, String label, String value, {bool latin = false, bool copy = false}) {
+/// صف إعداد بأيقونة الهوية (تعديل البيانات، تسجيل الخروج…).
+class LiveSettingRow extends StatelessWidget {
+  const LiveSettingRow({
+    super.key,
+    required this.icon,
+    required this.tone,
+    required this.title,
+    this.sub,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final GlyphTone tone;
+  final String title;
+  final String? sub;
+  final VoidCallback onTap;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
     final c = context.colors;
-    final vStyle = (latin ? latinFigures(AppTypography.bodyStrong) : AppTypography.bodyStrong).copyWith(color: c.ink);
-    Widget v = Text(value, style: vStyle, overflow: TextOverflow.ellipsis);
-    if (latin) v = Directionality(textDirection: TextDirection.ltr, child: v);
+    return Material(
+      color: c.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: BorderSide(color: c.border)),
+      child: InkWell(
+        customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Glyph(icon, tone: tone, size: 38),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: AppTypography.bodyStrong
+                            .copyWith(color: danger ? const Color(0xFFA8322E) : c.ink, fontSize: 15)),
+                    if (sub != null) Text(sub!, style: AppTypography.caption.copyWith(color: c.inkMuted)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_left_rounded, color: c.inkMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «تعديل البيانات» و«تسجيل الخروج» أسفل شاشة حسابي (للمسجّلين فقط).
+class LiveAccountActions extends StatelessWidget {
+  const LiveAccountActions({super.key, this.logoutOnly = false});
+
+  final bool logoutOnly;
+
+  @override
+  Widget build(BuildContext context) {
+    final live = LiveController.instance;
+    return ListenableBuilder(
+      listenable: live,
+      builder: (context, _) {
+        if (!live.isRegistered) return const SizedBox.shrink();
+        final u = live.user!;
+        if (logoutOnly) {
+          return LiveSettingRow(
+            icon: Icons.logout_rounded,
+            tone: GlyphTone.slate,
+            title: 'تسجيل خروج',
+            danger: true,
+            onTap: () async {
+              await live.signOut();
+              LiveHub.instance.sessions = const [];
+              LiveHub.instance.newSession();
+            },
+          );
+        }
+        return LiveSettingRow(
+          icon: Icons.manage_accounts_rounded,
+          tone: GlyphTone.blue,
+          title: 'تعديل البيانات',
+          sub: u.pendingEmail.isNotEmpty ? 'البريد الجديد بانتظار موافقة الإدارة' : 'الاسم والبريد وكلمة المرور',
+          onTap: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: context.colors.surface,
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+            builder: (_) => const _EditSheet(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _EditSheet extends StatefulWidget {
+  const _EditSheet();
+
+  @override
+  State<_EditSheet> createState() => _EditSheetState();
+}
+
+class _EditSheetState extends State<_EditSheet> {
+  final live = LiveController.instance;
+  late final _name = TextEditingController(text: live.user?.name ?? '');
+  late final _email = TextEditingController(text: live.user?.email ?? '');
+  final _pass = TextEditingController();
+  final _newPass = TextEditingController();
+  bool _show = false;
+  String? _msg;
+
+  @override
+  void dispose() {
+    for (final c in [_name, _email, _pass, _newPass]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final u = live.user;
+    if (u == null) return;
+    FocusScope.of(context).unfocus();
+    final emailChanged = _email.text.trim().toLowerCase() != u.email;
+    await live.updateAccount(
+      name: _name.text.trim(),
+      email: emailChanged ? _email.text.trim() : null,
+      password: (emailChanged || _newPass.text.isNotEmpty) ? _pass.text : null,
+      newPassword: _newPass.text,
+    );
+    if (!mounted) return;
+    if (live.error != null) {
+      setState(() => _msg = live.error);
+      return;
+    }
+    final pending = live.user?.pendingEmail.isNotEmpty ?? false;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.of(context).pop();
+    messenger?.showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      content: Text(pending && emailChanged
+          ? 'حُفظت بياناتك. البريد الجديد يتفعّل بعد موافقة الإدارة، وتقدر تستخدم التطبيق عادي.'
+          : 'حُفظت بياناتك'),
+    ));
+  }
+
+  Widget _f(TextEditingController c, String hint, {bool latin = false, bool obscure = false}) {
+    final col = context.colors;
+    return TextField(
+      controller: c,
+      obscureText: obscure && !_show,
+      textDirection: latin ? TextDirection.ltr : null,
+      autocorrect: false,
+      style: (latin ? latinFigures(AppTypography.body) : AppTypography.body).copyWith(color: col.ink),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: AppTypography.label.copyWith(color: col.inkMuted),
+        filled: true,
+        fillColor: col.bg,
+        suffixIcon: obscure
+            ? IconButton(
+                onPressed: () => setState(() => _show = !_show),
+                icon: Icon(_show ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                    size: 20, color: col.inkMuted),
+              )
+            : null,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: col.border)),
+        enabledBorder:
+            OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: col.border)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: col.goldLine, width: 1.5)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final pending = live.user?.pendingEmail ?? '';
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Text(label, style: AppTypography.label.copyWith(color: c.inkMuted)),
-          const SizedBox(width: 12),
-          Expanded(child: Align(alignment: AlignmentDirectional.centerEnd, child: v)),
-          if (copy)
-            IconButton(
-              tooltip: 'نسخ',
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: value));
-                _toast('نُسخ');
-              },
-              icon: Icon(Icons.copy_rounded, size: 18, color: c.goldText),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Glyph(Icons.manage_accounts_rounded, tone: GlyphTone.blue, size: 40),
+                const SizedBox(width: 10),
+                Text('تعديل البيانات', style: AppTypography.title.copyWith(color: c.ink)),
+              ],
             ),
-        ],
+            const SizedBox(height: 14),
+            _f(_name, 'الاسم'),
+            const SizedBox(height: 8),
+            _f(_email, 'البريد الإلكتروني', latin: true),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Text(
+                pending.isNotEmpty
+                    ? 'طلبك لتغيير البريد إلى $pending بانتظار موافقة الإدارة.'
+                    : 'تغيير البريد يحتاج موافقة الإدارة، وتكمل استخدام التطبيق عادي. الاسم وكلمة المرور يتغيرون فوراً.',
+                style: AppTypography.caption.copyWith(color: c.inkMuted),
+              ),
+            ),
+            _f(_newPass, 'كلمة مرور جديدة (اختياري)', obscure: true),
+            const SizedBox(height: 8),
+            _f(_pass, 'كلمة المرور الحالية (لتغيير البريد أو كلمة المرور)', obscure: true),
+            if (_msg != null) ...[
+              const SizedBox(height: 8),
+              Text(_msg!, style: AppTypography.label.copyWith(color: const Color(0xFFA8322E))),
+            ],
+            const SizedBox(height: 12),
+            ListenableBuilder(
+              listenable: live,
+              builder: (context, _) =>
+                  GoldButton.primary(label: 'حفظ', expand: true, onTap: live.busy ? null : _save),
+            ),
+          ],
+        ),
       ),
     );
   }

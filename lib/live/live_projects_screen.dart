@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/glyph.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
@@ -254,9 +255,11 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
         onTap: () => _open(m),
         onLongPress: () => _delete(m),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
           child: Row(
             children: [
+              Glyph(CategorySummary.icons[m.output]!, tone: outputTone(m.output.index), size: 40),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -351,9 +354,11 @@ class LiveRecentSessions extends StatelessWidget {
                 child: InkWell(
                   onTap: () => onOpen(list[i].id),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
+                        Glyph(CategorySummary.icons[list[i].output]!, tone: outputTone(list[i].output.index), size: 40),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

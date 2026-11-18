@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/glyph.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
@@ -30,12 +31,15 @@ const _tealGradient = LinearGradient(
 );
 
 class _Section {
-  const _Section(this.icon, this.title, this.sub, this.page, {this.soon = false});
+  const _Section(this.icon, this.title, this.sub, this.page, {this.soon = false, this.web});
   final IconData icon;
   final String title;
   final String sub;
   final Widget Function()? page;
   final bool soon;
+
+  /// قسم يفتح من لوحة الموقع داخل التطبيق.
+  final String? web;
 }
 
 class _LiveAdminScreenState extends State<LiveAdminScreen> {
@@ -49,13 +53,17 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
   }
 
   void _open(_Section s, int i) {
+    if (s.web != null) {
+      _openWeb(s.web!);
+      return;
+    }
     if (s.soon || s.page == null) {
       _toast(context, '${s.title}: قريباً');
       return;
     }
     Navigator.of(context)
         .push(MaterialPageRoute<void>(
-          builder: (_) => _AdminPage(title: s.title, icon: s.icon, alt: i.isOdd, child: s.page!()),
+          builder: (_) => _AdminPage(title: s.title, icon: s.icon, tone: GlyphToneX.at(i), child: s.page!()),
         ))
         .then((_) {
       if (mounted) setState(() => _dash = _load());
@@ -82,6 +90,8 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
             String cnt(Object? v, String unit) => has ? '${n(v)} $unit' : '…';
             final sections = <_Section>[
               _Section(Icons.insights_rounded, 'الإحصائيات', 'رسوم وأرقام حية', () => const _Overview()),
+              const _Section(Icons.savings_rounded, 'التحليل المالي', 'الإيراد والربحية', null, web: 'finance'),
+              const _Section(Icons.layers_rounded, 'الباقات والنماذج', '5 باقات ونماذجها', null, web: 'plans'),
               _Section(Icons.groups_rounded, 'المستخدمون', cnt(d['users'], 'حساب'), () => const _Users()),
               _Section(Icons.admin_panel_settings_rounded, 'الصلاحيات', cnt(d['admins'], 'مشرف'),
                   () => const _Users(filter: 'admins')),
@@ -90,7 +100,8 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
                   () => const _Codes()),
               _Section(Icons.tune_rounded, 'الإعدادات', 'نص الإحالة والخيارات', () => const _Settings()),
               _Section(Icons.history_rounded, 'السجل', 'كل حركة بوقتها', () => const _Log()),
-              const _Section(Icons.workspace_premium_rounded, 'الباقات', 'حدود كل باقة', null, soon: true),
+              _Section(Icons.mark_email_unread_rounded, 'طلبات البريد', cnt(d['pendingEmails'], 'طلب'), null,
+                  web: 'emails'),
             ];
             return RefreshIndicator(
               color: c.goldLine,
@@ -177,8 +188,8 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
   }
 
   /// لوحة الموقع تفتح داخل التطبيق (متصفح مدمج) وتدخل تلقائياً بحسابك.
-  Future<void> _openWeb() async {
-    final uri = Uri.parse(live.webAdminUrl);
+  Future<void> _openWeb([String section = '']) async {
+    final uri = Uri.parse(live.webAdminAt(section));
     var ok = false;
     try {
       ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
@@ -201,7 +212,7 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
       ),
       child: InkWell(
         customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        onTap: _openWeb,
+        onTap: () => _openWeb(),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -341,22 +352,7 @@ class _Tile extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      gradient: index.isOdd ? _tealGradient : AppColors.goldDiscGradient,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (index.isOdd ? const Color(0xFF0B5E54) : AppColors.goldDeep).withAlpha(60),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Icon(s.icon, color: Colors.white, size: 36),
-                  ),
+                  Glyph(s.icon, tone: GlyphToneX.at(index), size: 72),
                   const SizedBox(height: 10),
                   Text(s.title, style: AppTypography.bodyStrong.copyWith(color: c.ink)),
                   const SizedBox(height: 2),
@@ -403,10 +399,10 @@ class _Tile extends StatelessWidget {
 
 /// صفحة قسم: رأس بزر رجوع وأيقونة القسم، وتحته المحتوى.
 class _AdminPage extends StatelessWidget {
-  const _AdminPage({required this.title, required this.icon, required this.alt, required this.child});
+  const _AdminPage({required this.title, required this.icon, required this.tone, required this.child});
   final String title;
   final IconData icon;
-  final bool alt;
+  final GlyphTone tone;
   final Widget child;
 
   @override
@@ -423,15 +419,7 @@ class _AdminPage extends StatelessWidget {
                 children: [
                   _squareBack(context),
                   const SizedBox(width: 10),
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      gradient: alt ? _tealGradient : AppColors.goldDiscGradient,
-                    ),
-                    child: Icon(icon, color: Colors.white, size: 24),
-                  ),
+                  Glyph(icon, tone: tone, size: 42),
                   const SizedBox(width: 10),
                   Expanded(child: Text(title, style: AppTypography.title.copyWith(color: c.ink))),
                 ],

@@ -8,12 +8,14 @@ import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/glyph.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_account_card.dart';
 import 'live_api.dart';
 import 'live_session.dart';
+import 'live_stats.dart';
 import 'rich_text_view.dart';
 import 'scroll_top.dart';
 
@@ -420,23 +422,44 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
           decoration: _fieldDecoration(context, 'مصادر (اختياري): روابط أو مراجع أو ملاحظات…'),
         ),
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final o in LiveOutput.values)
-              ChoiceChip(
-                label: Text(o.label),
-                selected: s.output == o,
-                onSelected: (_) => setState(() => s.output = o),
-                labelStyle: AppTypography.label.copyWith(color: s.output == o ? c.goldText : c.ink),
-                selectedColor: c.surfaceSoft,
-                backgroundColor: c.surface,
-                side: BorderSide(color: s.output == o ? c.goldLine : c.border),
-                showCheckmark: false,
-              ),
-          ],
-        ),
+        LayoutBuilder(builder: (context, box) {
+          final w = (box.maxWidth - 16) / 3;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final o in LiveOutput.values)
+                SizedBox(
+                  width: w,
+                  child: Material(
+                    color: s.output == o ? c.surfaceSoft : c.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      side: BorderSide(color: s.output == o ? c.goldLine : c.border, width: s.output == o ? 1.5 : 1),
+                    ),
+                    child: InkWell(
+                      customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      onTap: () => setState(() => s.output = o),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                        child: Column(
+                          children: [
+                            Glyph(CategorySummary.icons[o]!, tone: outputTone(o.index), size: 40),
+                            const SizedBox(height: 6),
+                            Text(o.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.caption
+                                    .copyWith(color: s.output == o ? c.goldText : c.ink, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        }),
         const SizedBox(height: 16),
         GoldButton.primary(label: 'ابدأ النقاش', expand: true, onTap: _start),
       ],

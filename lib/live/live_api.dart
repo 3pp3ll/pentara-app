@@ -31,6 +31,7 @@ class LiveUser {
     required this.spentMicros,
     required this.disabled,
     required this.isOwner,
+    this.pendingEmail = '',
   });
 
   factory LiveUser.fromJson(Map<String, dynamic> j) => LiveUser(
@@ -45,9 +46,13 @@ class LiveUser {
         spentMicros: (j['spentMicros'] as num?)?.toInt() ?? 0,
         disabled: j['disabled'] == true,
         isOwner: j['isOwner'] == true,
+        pendingEmail: '${j['pendingEmail'] ?? ''}',
       );
 
   final String id;
+
+  /// بريد جديد ينتظر موافقة الإدارة.
+  final String pendingEmail;
   final String name;
   final String email;
   final bool guest;
@@ -76,8 +81,31 @@ class LiveUser {
         spentMicros: spent,
         disabled: disabled,
         isOwner: isOwner,
+        pendingEmail: pendingEmail,
       );
   String get balanceLabel => formatMicros(balanceMicros);
+}
+
+/// باقة ظاهرة في التطبيق كما يحددها المالك من لوحة التحكم.
+class LivePlan {
+  const LivePlan({required this.id, required this.name, required this.priceUsd, this.perks = const [], this.featured = false});
+
+  factory LivePlan.fromJson(Map<String, dynamic> j) => LivePlan(
+        id: '${j['id'] ?? ''}',
+        name: '${j['name'] ?? ''}',
+        priceUsd: (j['priceUsd'] as num?)?.toDouble() ?? 0,
+        perks: [for (final x in (j['perks'] as List? ?? const [])) '$x'],
+        featured: j['featured'] == true,
+      );
+
+  final String id;
+  final String name;
+  final double priceUsd;
+  final List<String> perks;
+  final bool featured;
+
+  String get priceLabel =>
+      '\$${priceUsd == priceUsd.roundToDouble() ? priceUsd.toStringAsFixed(0) : priceUsd.toStringAsFixed(2)}';
 }
 
 String formatMicros(int micros) => '\$${(micros / 1000000).toStringAsFixed(2)}';
@@ -105,6 +133,9 @@ class LiveController extends ChangeNotifier {
 
   /// نص الإحالة تحت بطاقة المستخدم: يكتبه المالك ويُظهره من لوحة التحكم على الويب.
   String referText = '';
+
+  /// الباقات الظاهرة (من السيرفر). فاضية = تُعرض الباقات الافتراضية.
+  List<LivePlan> plans = const [];
   bool referVisible = false;
 
   /// اسم الزائر قبل التسجيل: يُختار عشوائياً مرة ويُحفظ في الجهاز.
@@ -135,7 +166,13 @@ class LiveController extends ChangeNotifier {
   String? _login;
 
   /// رابط لوحة التحكم على الموقع مع دخول تلقائي بحساب التطبيق (الرمز في # فلا يصل لأي سجل خادم).
-  String get webAdminUrl => '$kServerUrl/admin${_login == null ? '' : '#app=${Uri.encodeComponent(_login!)}'}';
+  String get webAdminUrl => webAdminAt('');
+
+  /// يفتح قسماً محدداً من لوحة الموقع (finance, plans, users…).
+  String webAdminAt(String section) {
+    if (_login == null) return '$kServerUrl/admin${section.isEmpty ? '' : '#/$section'}';
+    return '$kServerUrl/admin#app=${Uri.encodeComponent(_login!)}${section.isEmpty ? '' : '&go=$section'}';
+  }
   LiveUser? _user;
   bool _busy = false;
   bool _ready = false;
@@ -238,6 +275,10 @@ class LiveController extends ChangeNotifier {
         if (cfg is Map<String, dynamic>) {
           referText = '${cfg['referText'] ?? ''}'.trim();
           referVisible = cfg['referVisible'] == true;
+        }
+        final pl = data['plans'];
+        if (pl is List) {
+          plans = [for (final x in pl) if (x is Map<String, dynamic>) LivePlan.fromJson(x)];
         }
       } catch (_) {}
     }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/glyph.dart';
+
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import '../widgets/project_card.dart' show latinFigures;
@@ -66,7 +68,7 @@ class CategorySummary extends StatelessWidget {
                   if (o != LiveOutput.values.first) const SizedBox(width: 8),
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                       decoration: BoxDecoration(
                         color: c.surface,
                         borderRadius: BorderRadius.circular(16),
@@ -74,11 +76,11 @@ class CategorySummary extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          Icon(icons[o], size: 20, color: c.goldText),
+                          Glyph(icons[o]!, tone: outputTone(o.index), size: 34),
                           const SizedBox(height: 6),
                           Text(
                             '${data.counts[o] ?? 0}',
-                            style: latinFigures(AppTypography.title).copyWith(color: c.ink),
+                            style: latinFigures(AppTypography.bodyStrong).copyWith(color: c.ink, fontSize: 16),
                           ),
                           Text(
                             o.category,

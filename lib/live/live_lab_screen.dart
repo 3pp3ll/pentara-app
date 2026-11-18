@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/glyph.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
 import 'live_projects_screen.dart';
@@ -75,19 +76,22 @@ class _LiveLabScreenState extends State<LiveLabScreen> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(child: _tile(context, 'الجلسات', '$sessions', latin: true)),
+                        Expanded(child: _tile(context, 'الجلسات', '$sessions', Icons.forum_rounded, GlyphTone.gold, latin: true)),
                         const SizedBox(width: 10),
-                        Expanded(child: _tile(context, 'متوسط تكلفة الجلسة', formatMicros(avg), latin: true)),
+                        Expanded(child: _tile(context, 'الأكثر طلباً', top?.category ?? '—', Icons.local_fire_department_rounded, GlyphTone.copper)),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: _tile(context, 'إجمالي التكلفة', formatMicros(cost), latin: true)),
-                        const SizedBox(width: 10),
-                        Expanded(child: _tile(context, 'الأكثر طلباً', top?.category ?? '—')),
-                      ],
-                    ),
+                    // أرقام التكلفة للمالك والمشرفين فقط (لا تظهر للزوار ولا للمستخدمين).
+                    if (live.isRegistered && (live.user?.isAdmin ?? false)) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(child: _tile(context, 'متوسط تكلفة الجلسة', formatMicros(avg), Icons.calculate_rounded, GlyphTone.blue, latin: true)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _tile(context, 'إجمالي التكلفة', formatMicros(cost), Icons.account_balance_rounded, GlyphTone.indigo, latin: true)),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     Text('توزيع المشاريع', style: AppTypography.title.copyWith(color: c.ink)),
                     const SizedBox(height: 10),
@@ -99,11 +103,12 @@ class _LiveLabScreenState extends State<LiveLabScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: _tile(context, 'جلساتك', '${LiveHub.instance.sessions.length}', latin: true),
+                            child: _tile(context, 'جلساتك', '${LiveHub.instance.sessions.length}', Icons.history_edu_rounded, GlyphTone.emerald, latin: true),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: _tile(context, 'ما صرفته', formatMicros(live.user?.spentMicros ?? 0),
+                                Icons.payments_rounded, GlyphTone.gold,
                                 latin: true),
                           ),
                         ],
@@ -124,24 +129,40 @@ class _LiveLabScreenState extends State<LiveLabScreen> {
     );
   }
 
-  Widget _tile(BuildContext context, String label, String value, {bool latin = false}) {
+  /// بطاقة رقم مضغوطة: أيقونة بألوان الهوية، والعنوان والرقم بجانبها.
+  Widget _tile(BuildContext context, String label, String value, IconData icon, GlyphTone tone,
+      {bool latin = false}) {
     final c = context.colors;
-    final style = (latin ? latinFigures(AppTypography.metric) : AppTypography.title).copyWith(color: c.ink);
+    final style = (latin ? latinFigures(AppTypography.bodyStrong) : AppTypography.bodyStrong)
+        .copyWith(color: c.ink, fontSize: 18);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: c.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(label, style: AppTypography.caption.copyWith(color: c.inkMuted)),
-          const SizedBox(height: 6),
-          Directionality(
-            textDirection: latin ? TextDirection.ltr : Directionality.of(context),
-            child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+          Glyph(icon, tone: tone, size: 38),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(color: c.inkMuted)),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Directionality(
+                    textDirection: latin ? TextDirection.ltr : Directionality.of(context),
+                    child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -168,7 +189,7 @@ class _LiveLabScreenState extends State<LiveLabScreen> {
               final f = total == 0 ? 0.0 : n / total;
               return Row(
                 children: [
-                  Icon(CategorySummary.icons[o], size: 18, color: c.goldText),
+                  Glyph(CategorySummary.icons[o]!, tone: outputTone(o.index), size: 30),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 84,
@@ -181,7 +202,7 @@ class _LiveLabScreenState extends State<LiveLabScreen> {
                         value: f,
                         minHeight: 10,
                         backgroundColor: c.track,
-                        color: const Color(0xFFC9A75A),
+                        color: outputTone(o.index).shadow,
                       ),
                     ),
                   ),

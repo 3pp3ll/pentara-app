@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../data/app_state.dart';
-import '../data/mock_data.dart';
 import '../data/models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/glyph.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import '../live/live_admin_screen.dart';
 import '../live/live_account_card.dart';
 import '../live/live_api.dart';
 import '../widgets/share_card.dart';
 
-/// حسابي: عرض فقط (بلا دفع ولا فتح روابط). بطاقة المستخدم كحلية من ألوان
+/// حسابي. بطاقة المستخدم كحلية من ألوان
 /// الوضع الداكن في الوضعين.
 class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key});
@@ -117,14 +117,30 @@ class AccountScreen extends StatelessWidget {
           const LiveAccountCard(),
           const SizedBox(height: 16),
 
-          // ---- الباقات
+          // ---- الباقات (يحددها المالك من لوحة التحكم: الاسم والسعر وما تشمله)
           Text('الباقات', style: AppTypography.title.copyWith(color: c.ink)),
-          const SizedBox(height: 12),
-          for (var i = 0; i < MockData.plans.length; i++) ...[
-            if (i > 0) const SizedBox(height: 8),
-            _PlanRow(plan: MockData.plans[i]),
-          ],
-          // لوحة التحكم: تظهر فقط بعد دخول المالك بحسابه.
+          const SizedBox(height: 10),
+          ListenableBuilder(
+            listenable: LiveController.instance,
+            builder: (context, _) {
+              final plans = LiveController.instance.plans.isNotEmpty
+                  ? LiveController.instance.plans
+                  : _fallbackPlans;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < plans.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 8),
+                    _PlanRow(plan: plans[i]),
+                  ],
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          // ---- تعديل البيانات (بعد الباقات)
+          const LiveAccountActions(),
+          // لوحة التحكم: تظهر فقط بعد دخول المالك أو المشرف بحسابه.
           ListenableBuilder(
             listenable: LiveController.instance,
             builder: (context, _) {
@@ -132,17 +148,36 @@ class AccountScreen extends StatelessWidget {
               if (!live.isRegistered || !(live.user?.isAdmin ?? false)) {
                 return const SizedBox.shrink();
               }
-              return const Padding(
-                padding: EdgeInsets.only(top: 24),
-                child: _AdminEntry(),
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: LiveSettingRow(
+                  icon: Icons.admin_panel_settings_rounded,
+                  tone: GlyphTone.gold,
+                  title: 'لوحة التحكم',
+                  sub: 'للمالك والمشرفين فقط',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const LiveAdminScreen()),
+                  ),
+                ),
               );
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          // ---- تسجيل الخروج أسفل الصفحة
+          const LiveAccountActions(logoutOnly: true),
+          const SizedBox(height: 28),
           Center(
-            child: Text(
-              'عرض واجهة — بلا دفع',
-              style: AppTypography.caption.copyWith(color: c.inkMuted),
+            child: Column(
+              children: [
+                Text('© 2026 Pentara AI · جميع الحقوق محفوظة',
+                    style: AppTypography.caption.copyWith(color: c.inkMuted)),
+                const SizedBox(height: 2),
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text('الإصدار 1.0',
+                      style: latinFigures(AppTypography.caption).copyWith(color: c.inkMuted)),
+                ),
+              ],
             ),
           ),
         ],
@@ -534,31 +569,48 @@ class _CreditItem extends StatelessWidget {
   }
 }
 
-/// صف باقة مدمج. العليا وحدها بحد ذهبي وظل ذهبي وشارة.
+/// الباقات الافتراضية إذا لم يصل رد السيرفر.
+const _fallbackPlans = [
+  LivePlan(id: 'regular', name: 'العادية', priceUsd: 30, perks: [
+    'حتى 20 مشروعاً شهرياً',
+    'نصوص وتحليل وخطط عمل وبحوث',
+    'تطبيقات الويب وفلاتر غير متاحة (تستهلك الرصيد)',
+  ]),
+  LivePlan(id: 'max', name: 'ماكس', priceUsd: 80, perks: [
+    'بحوث وتحاليل وخطط عمل',
+    'تطبيق فلاتر واحد أو 3 تطبيقات ويب شهرياً',
+  ]),
+  LivePlan(id: 'top', name: 'العليا', priceUsd: 200, featured: true, perks: [
+    '3 تطبيقات فلاتر، أو تطبيق فلاتر + 3 إلى 6 تطبيقات ويب',
+    '5 إلى 10 مواقع، مع التحليل وخطط العمل',
+    'الرصيد المتبقي آخر الشهر يصلك كود هدية',
+  ]),
+];
+
+/// صف باقة مدمج: الاسم والسعر بخط عادي، وما تشمله بخط صغير داخل نفس البطاقة.
 class _PlanRow extends StatelessWidget {
   const _PlanRow({required this.plan});
 
-  final Plan plan;
+  final LivePlan plan;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final featured = plan.isFeatured;
-
+    final featured = plan.featured;
     return Container(
-      constraints: const BoxConstraints(minHeight: 56),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: featured ? c.goldLine : c.border,
-          width: 1,
-        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: featured ? c.goldLine : c.border),
         boxShadow: featured ? AppColors.goldShadow : null,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Glyph(featured ? Icons.workspace_premium_rounded : Icons.layers_rounded,
+              tone: featured ? GlyphTone.gold : GlyphTone.emerald, size: 34),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -566,176 +618,37 @@ class _PlanRow extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(plan.name,
-                          style:
-                              AppTypography.bodyStrong.copyWith(color: c.ink)),
+                      child: Text(plan.name, style: AppTypography.bodyStrong.copyWith(color: c.ink, fontSize: 15)),
                     ),
-                    if (plan.badgeText != null) ...[
-                      const SizedBox(width: 8),
-                      DecoratedBox(
+                    if (featured) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
                         decoration: ShapeDecoration(
                           color: c.surfaceSoft,
-                          shape: StadiumBorder(
-                              side: BorderSide(color: c.goldLine)),
+                          shape: StadiumBorder(side: BorderSide(color: c.goldLine)),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 3),
-                          child: Text(
-                            plan.badgeText!,
-                            style: AppTypography.caption
-                                .copyWith(color: c.goldText),
-                          ),
-                        ),
+                        child: Text('الأكثر تميزاً', style: AppTypography.caption.copyWith(color: c.goldText, fontSize: 11)),
                       ),
                     ],
                   ],
                 ),
-                if (plan.quotaText != null)
-                  Text(
-                    plan.quotaText!,
-                    style:
-                        AppTypography.caption.copyWith(color: c.inkMuted),
-                  ),
+                for (final p in plan.perks)
+                  Text('• $p',
+                      style: AppTypography.caption.copyWith(color: c.inkMuted, fontSize: 11.5, height: 1.5)),
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Directionality(
             textDirection: TextDirection.ltr,
             child: Text(
               plan.priceLabel,
-              style: latinFigures(AppTypography.bodyStrong)
-                  .copyWith(color: featured ? c.goldText : c.ink),
+              style: latinFigures(AppTypography.label).copyWith(color: featured ? c.goldText : c.ink, fontWeight: FontWeight.w600),
             ),
           ),
         ],
       ),
     );
   }
-}
-
-
-/// صف «لوحة التحكم»: يظهر للمالك فقط ويفتح AdminScreen.
-class _AdminEntry extends StatelessWidget {
-  const _AdminEntry();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Material(
-      color: c.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: c.goldLine, width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const LiveAdminScreen()),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: AppColors.goldDiscGradient,
-                  ),
-                  child: const ExcludeSemantics(
-                    child: CustomPaint(painter: _SlidersPainter()),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'لوحة التحكم',
-                        style: AppTypography.bodyStrong.copyWith(color: c.ink),
-                      ),
-                      Text(
-                        'للمالك فقط: الباقات والمستخدمون والترتيب',
-                        style: AppTypography.caption.copyWith(color: c.inkMuted),
-                      ),
-                    ],
-                  ),
-                ),
-                ExcludeSemantics(
-                  child: CustomPaint(
-                    size: const Size(16, 16),
-                    painter: _ChevronPainter(color: c.goldText),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// ثلاثة أشرطة بمقابض: رمز الإعدادات.
-class _SlidersPainter extends CustomPainter {
-  const _SlidersPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.scale(size.width / 24);
-    final line = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..isAntiAlias = true;
-    final knob = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-    const ys = [8.0, 12.0, 16.0];
-    const xs = [14.5, 9.5, 13.0];
-    for (var i = 0; i < 3; i++) {
-      canvas.drawLine(Offset(6.5, ys[i]), Offset(17.5, ys[i]), line);
-      canvas.drawCircle(Offset(xs[i], ys[i]), 1.9, knob);
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _SlidersPainter old) => false;
-}
-
-/// سهم يشير لاتجاه الدخول (يسار في RTL).
-class _ChevronPainter extends CustomPainter {
-  const _ChevronPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = color
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke
-      ..isAntiAlias = true;
-    final w = size.width, h = size.height;
-    final path = Path()
-      ..moveTo(w * 0.62, h * 0.2)
-      ..lineTo(w * 0.32, h * 0.5)
-      ..lineTo(w * 0.62, h * 0.8);
-    canvas.drawPath(path, p);
-  }
-
-  @override
-  bool shouldRepaint(covariant _ChevronPainter old) => old.color != color;
 }
