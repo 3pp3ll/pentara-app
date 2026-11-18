@@ -25,7 +25,6 @@ class LiveProjectsScreen extends StatefulWidget {
 class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
   final TextEditingController _q = TextEditingController();
   final ScrollController _scroll = ScrollController();
-  LiveOutput? _filter;
   bool _requested = false;
 
   LiveHub get hub => LiveHub.instance;
@@ -124,8 +123,12 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
           final signedIn = LiveController.instance.isSignedIn;
           final q = _q.text.trim();
           final rows = hub.sessions.where((m) {
-            if (_filter != null && m.output != _filter) return false;
-            return q.isEmpty || m.title.contains(q);
+            if (q.isEmpty) return true;
+            // كل كلمة في البحث تُطابق العنوان أو النوع أو الحالة (جلسات المستخدم نفسه فقط).
+            final hay = '${m.title} ${m.output.label} ${m.output.category} '
+                    '${m.status == 'done' ? 'مكتملة' : 'متوقفة'}'
+                .toLowerCase();
+            return q.toLowerCase().split(RegExp(r'\s+')).every(hay.contains);
           }).toList();
 
           return Stack(
@@ -156,41 +159,79 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                     style: AppTypography.body.copyWith(color: c.inkMuted),
                   )
                 else ...[
-                  TextField(
-                    controller: _q,
-                    onChanged: (_) => setState(() {}),
-                    style: AppTypography.body.copyWith(color: c.ink),
-                    decoration: InputDecoration(
-                      hintText: 'ابحث في جلساتك…',
-                      hintStyle: AppTypography.body.copyWith(color: c.inkMuted),
-                      filled: true,
-                      fillColor: c.surface,
-                      prefixIcon: Icon(Icons.search_rounded, color: c.goldText),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        borderSide: BorderSide(color: c.goldLine),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        borderSide: BorderSide(color: c.goldLine.withAlpha(170), width: 1.2),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(999),
-                        borderSide: BorderSide(color: c.goldLine, width: 1.5),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  // خانة بحث واحدة بحد ذهبي، وزر «بحث» بالعدسة.
+                  Row(
                     children: [
-                      _chip(context, 'الكل', Icons.apps_rounded, GlyphTone.gold, _filter == null,
-                          () => setState(() => _filter = null)),
-                      for (final o in LiveOutput.values)
-                        _chip(context, o.label, CategorySummary.icons[o]!, outputTone(o.index), _filter == o,
-                            () => setState(() => _filter = o)),
+                      Expanded(
+                        child: TextField(
+                          controller: _q,
+                          onChanged: (_) => setState(() {}),
+                          onSubmitted: (_) => setState(() {}),
+                          textInputAction: TextInputAction.search,
+                          style: AppTypography.body.copyWith(color: c.ink),
+                          decoration: InputDecoration(
+                            hintText: 'اكتب أي كلمة من مشاريعك…',
+                            hintStyle: AppTypography.body.copyWith(color: c.inkMuted),
+                            filled: true,
+                            fillColor: c.surface,
+                            suffixIcon: _q.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'مسح',
+                                    onPressed: () => setState(_q.clear),
+                                    icon: Icon(Icons.close_rounded, color: c.inkMuted, size: 20),
+                                  ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(999),
+                              borderSide: BorderSide(color: c.goldLine),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(999),
+                              borderSide: BorderSide(color: c.goldLine.withAlpha(170), width: 1.2),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(999),
+                              borderSide: BorderSide(color: c.goldLine, width: 1.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          customBorder: const StadiumBorder(),
+                          onTap: () {
+                            FocusScope.of(context).unfocus();
+                            setState(() {});
+                          },
+                          child: Ink(
+                            height: 50,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: ShapeDecoration(
+                              shape: const StadiumBorder(),
+                              gradient: GlyphTone.gold.gradient,
+                              shadows: [
+                                BoxShadow(
+                                  color: GlyphTone.gold.shadow.withAlpha(70),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.search_rounded, color: Colors.white, size: 20),
+                                const SizedBox(width: 4),
+                                Text('بحث',
+                                    style: AppTypography.label.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -225,40 +266,6 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
             ],
           );
         },
-      ),
-    );
-  }
-
-  /// فلتر بلون أيقونته في الصف العلوي: المختار متدرج، والباقي بحد ولون النوع.
-  Widget _chip(BuildContext context, String label, IconData icon, GlyphTone tone, bool on, VoidCallback tap) {
-    final c = context.colors;
-    final ink = tone.shadow;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        customBorder: const StadiumBorder(),
-        onTap: tap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            gradient: on ? tone.gradient : null,
-            color: on ? null : c.surface,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: on ? Colors.transparent : ink.withAlpha(150)),
-            boxShadow: on ? [BoxShadow(color: ink.withAlpha(60), blurRadius: 10, offset: const Offset(0, 4))] : null,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: on ? Colors.white : ink),
-              const SizedBox(width: 6),
-              Text(label,
-                  style: AppTypography.label
-                      .copyWith(color: on ? Colors.white : c.ink, fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
-            ],
-          ),
-        ),
       ),
     );
   }
