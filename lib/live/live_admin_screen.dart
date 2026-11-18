@@ -13,8 +13,8 @@ import 'live_session.dart';
 const _danger = Color(0xFFA8322E);
 const _ok = Color(0xFF1F6B4A);
 
-/// لوحة التحكم الحقيقية داخل التطبيق: نظرة عامة بالرسوم، المستخدمون وصلاحياتهم،
-/// أكواد المتجر، إعدادات التطبيق، والسجل. للمالك ومن يمنحه صلاحية مشرف.
+/// لوحة التحكم: شاشة رئيسية فخمة من أيقونات كبيرة، كل أيقونة تفتح قسمها.
+/// للمالك ومن يمنحه صلاحية مشرف.
 class LiveAdminScreen extends StatefulWidget {
   const LiveAdminScreen({super.key});
 
@@ -22,76 +22,364 @@ class LiveAdminScreen extends StatefulWidget {
   State<LiveAdminScreen> createState() => _LiveAdminScreenState();
 }
 
+const _tealGradient = LinearGradient(
+  begin: AppColors.disc145Begin,
+  end: AppColors.disc145End,
+  colors: [Color(0xFF2E9C8A), Color(0xFF0B5E54)],
+);
+
+class _Section {
+  const _Section(this.icon, this.title, this.sub, this.page, {this.soon = false});
+  final IconData icon;
+  final String title;
+  final String sub;
+  final Widget Function()? page;
+  final bool soon;
+}
+
 class _LiveAdminScreenState extends State<LiveAdminScreen> {
-  int _tab = 0;
-  static const _tabs = ['نظرة عامة', 'المستخدمون', 'الأكواد', 'الإعدادات', 'السجل'];
+  late Future<Map<String, dynamic>> _dash = _load();
 
   LiveController get live => LiveController.instance;
+
+  Future<Map<String, dynamic>> _load() async {
+    final r = await live.adminGet('dashboard');
+    return (r['dashboard'] as Map?)?.cast<String, dynamic>() ?? const {};
+  }
+
+  void _open(_Section s, int i) {
+    if (s.soon || s.page == null) {
+      _toast(context, '${s.title}: قريباً');
+      return;
+    }
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(
+          builder: (_) => _AdminPage(title: s.title, icon: s.icon, alt: i.isOdd, child: s.page!()),
+        ))
+        .then((_) {
+      if (mounted) setState(() => _dash = _load());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final isOwner = live.user?.isOwner ?? false;
+    final u = live.user;
+    final isOwner = u?.isOwner ?? false;
+    final wide = MediaQuery.sizeOf(context).width >= 700;
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: SafeArea(
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _dash,
+          builder: (context, snap) {
+            final d = snap.data ?? const <String, dynamic>{};
+            int n(Object? v) => (v as num?)?.toInt() ?? 0;
+            final sessions = (d['sessions'] as Map?)?.cast<String, dynamic>() ?? const {};
+            final sales = (d['sales'] as Map?)?.cast<String, dynamic>() ?? const {};
+            final has = snap.hasData;
+            String cnt(Object? v, String unit) => has ? '${n(v)} $unit' : '…';
+            final sections = <_Section>[
+              _Section(Icons.insights_rounded, 'الإحصائيات', 'رسوم وأرقام حية', () => const _Overview()),
+              _Section(Icons.groups_rounded, 'المستخدمون', cnt(d['users'], 'حساب'), () => const _Users()),
+              _Section(Icons.admin_panel_settings_rounded, 'الصلاحيات', cnt(d['admins'], 'مشرف'),
+                  () => const _Users(filter: 'admins')),
+              _Section(Icons.devices_rounded, 'الأجهزة', 'ربط الأجهزة وفكّها', () => const _Users(filter: 'multi')),
+              _Section(Icons.confirmation_number_rounded, 'الأكواد', cnt(sales['count'], 'مفعّل'),
+                  () => const _Codes()),
+              _Section(Icons.tune_rounded, 'الإعدادات', 'نص الإحالة والخيارات', () => const _Settings()),
+              _Section(Icons.history_rounded, 'السجل', 'كل حركة بوقتها', () => const _Log()),
+              const _Section(Icons.workspace_premium_rounded, 'الباقات', 'حدود كل باقة', null, soon: true),
+            ];
+            return RefreshIndicator(
+              color: c.goldLine,
+              onRefresh: () async {
+                setState(() => _dash = _load());
+                await _dash.catchError((_) => const <String, dynamic>{});
+              },
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                children: [
+                  Row(
+                    children: [
+                      _squareBack(context),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text('لوحة التحكم', style: AppTypography.title.copyWith(color: c.ink)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          gradient: AppColors.goldDiscGradient,
+                        ),
+                        child: Text(isOwner ? 'المالك' : 'مشرف',
+                            style: AppTypography.caption.copyWith(color: AppColors.onGold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  _hero(context, u?.displayName ?? ''),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _miniKpi(context, has ? '${n(d['users'])}' : '…', 'مستخدم')),
+                      const SizedBox(width: 10),
+                      Expanded(child: _miniKpi(context, has ? '${n(d['newThisWeek'])}' : '…', 'جديد هالأسبوع')),
+                      const SizedBox(width: 10),
+                      Expanded(child: _miniKpi(context, has ? '${n(sessions['sessions'])}' : '…', 'جلسة')),
+                    ],
+                  ),
+                  if (snap.hasError) ...[
+                    const SizedBox(height: 8),
+                    Text(_err(snap.error!), style: AppTypography.caption.copyWith(color: _danger)),
+                  ],
+                  const SizedBox(height: 16),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: sections.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: wide ? 4 : 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      mainAxisExtent: 168,
+                    ),
+                    itemBuilder: (context, i) => _Tile(
+                      section: sections[i],
+                      index: i,
+                      onTap: () => _open(sections[i], i),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: Icon(Icons.logout_rounded, color: c.ink, size: 20),
+                    label: Text('خروج من لوحة التحكم', style: AppTypography.bodyStrong.copyWith(color: c.ink)),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      side: BorderSide(color: c.border),
+                      backgroundColor: c.surface,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _hero(BuildContext context, String name) {
+    final h = DateTime.now().hour;
+    final greet = h < 12 ? 'صباح الخير' : 'مساء الخير';
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: const LinearGradient(
+          begin: AppColors.disc145Begin,
+          end: AppColors.disc145End,
+          colors: [AppColors.goldLight, AppColors.goldDiscStart, AppColors.goldDeep],
+        ),
+        boxShadow: AppColors.goldShadow,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withAlpha(70),
+              border: Border.all(color: Colors.white.withAlpha(140)),
+            ),
+            child: const Icon(Icons.shield_rounded, color: AppColors.onGold, size: 30),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name.isEmpty ? greet : '$greet يا $name',
+                    style: AppTypography.bodyStrong.copyWith(color: AppColors.onGold, fontSize: 17)),
+                const SizedBox(height: 2),
+                Text('كل أدوات بنتارا في مكان واحد',
+                    style: AppTypography.label.copyWith(color: AppColors.onGold.withAlpha(190))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniKpi(BuildContext context, String v, String label) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: c.goldLine.withAlpha(120)),
+      ),
+      child: Column(
+        children: [
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(v, style: latinFigures(AppTypography.title).copyWith(color: c.goldText)),
+          ),
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption.copyWith(color: c.inkMuted)),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _squareBack(BuildContext context) {
+  final c = context.colors;
+  return Material(
+    color: c.surface,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: c.border)),
+    child: InkWell(
+      customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      onTap: () => Navigator.of(context).maybePop(),
+      child: SizedBox(
+        width: 42,
+        height: 42,
+        child: Icon(Icons.arrow_forward_rounded, color: c.ink, size: 20),
+      ),
+    ),
+  );
+}
+
+/// أيقونة كبيرة: مربع متدرج (ذهبي أو زمردي بالتناوب) فيه الرمز، والعنوان والوصف تحته.
+class _Tile extends StatelessWidget {
+  const _Tile({required this.section, required this.index, required this.onTap});
+  final _Section section;
+  final int index;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final s = section;
+    final tile = Material(
+      color: c.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: c.border)),
+      child: InkWell(
+        customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        onTap: onTap,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 18, 8, 12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      gradient: index.isOdd ? _tealGradient : AppColors.goldDiscGradient,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (index.isOdd ? const Color(0xFF0B5E54) : AppColors.goldDeep).withAlpha(60),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Icon(s.icon, color: Colors.white, size: 36),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(s.title, style: AppTypography.bodyStrong.copyWith(color: c.ink)),
+                  const SizedBox(height: 2),
+                  Text(s.sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.caption.copyWith(color: c.inkMuted)),
+                ],
+              ),
+            ),
+            if (s.soon)
+              PositionedDirectional(
+                top: 10,
+                start: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: c.goldLine),
+                    color: c.surfaceSoft,
+                  ),
+                  child: Text('قريباً', style: AppTypography.caption.copyWith(color: c.goldText)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 380 + index * 60),
+      curve: Curves.easeOutBack,
+      builder: (context, t, child) => Opacity(
+        opacity: t.clamp(0.0, 1.0).toDouble() * (s.soon ? 0.55 : 1.0),
+        child: Transform.translate(
+          offset: Offset(0, (1 - t) * 14),
+          child: Transform.scale(scale: 0.9 + 0.1 * t, child: child),
+        ),
+      ),
+      child: tile,
+    );
+  }
+}
+
+/// صفحة قسم: رأس بزر رجوع وأيقونة القسم، وتحته المحتوى.
+class _AdminPage extends StatelessWidget {
+  const _AdminPage({required this.title, required this.icon, required this.alt, required this.child});
+  final String title;
+  final IconData icon;
+  final bool alt;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(8, 8, 16, 4),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Row(
                 children: [
-                  IconButton(
-                    tooltip: 'رجوع',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: Icon(Icons.arrow_forward_rounded, color: c.ink),
-                  ),
-                  Expanded(
-                    child: Text('لوحة التحكم', style: AppTypography.title.copyWith(color: c.ink)),
-                  ),
+                  _squareBack(context),
+                  const SizedBox(width: 10),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: c.goldLine),
+                      borderRadius: BorderRadius.circular(14),
+                      gradient: alt ? _tealGradient : AppColors.goldDiscGradient,
                     ),
-                    child: Text(isOwner ? 'المالك' : 'مشرف',
-                        style: AppTypography.caption.copyWith(color: c.goldText)),
+                    child: Icon(icon, color: Colors.white, size: 24),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(title, style: AppTypography.title.copyWith(color: c.ink))),
                 ],
               ),
             ),
-            SizedBox(
-              height: 52,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                itemCount: _tabs.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final on = i == _tab;
-                  return ChoiceChip(
-                    label: Text(_tabs[i]),
-                    selected: on,
-                    onSelected: (_) => setState(() => _tab = i),
-                    labelStyle: AppTypography.label.copyWith(color: on ? c.goldText : c.ink),
-                    selectedColor: c.surfaceSoft,
-                    backgroundColor: c.surface,
-                    side: BorderSide(color: on ? c.goldLine : c.border),
-                    showCheckmark: false,
-                  );
-                },
-              ),
-            ),
-            Expanded(
-              child: switch (_tab) {
-                0 => const _Overview(),
-                1 => const _Users(),
-                2 => const _Codes(),
-                3 => const _Settings(),
-                _ => const _Log(),
-              },
-            ),
+            Expanded(child: child),
           ],
         ),
       ),
@@ -499,7 +787,10 @@ class _Bars extends StatelessWidget {
 // ---- المستخدمون -----------------------------------------------------------------
 
 class _Users extends StatefulWidget {
-  const _Users();
+  const _Users({this.filter = 'all'});
+
+  /// all: الكل · admins: المالك والمشرفون · multi: من يُسمح لهم بعدة أجهزة.
+  final String filter;
 
   @override
   State<_Users> createState() => _UsersState();
@@ -530,10 +821,12 @@ class _UsersState extends State<_Users> {
         final q = _q.text.trim().toLowerCase();
         final idx = [
           for (var i = 0; i < all.length; i++)
-            if (q.isEmpty ||
+            if ((widget.filter != 'admins' || all[i].isAdmin) &&
+                (widget.filter != 'multi' || raw[i]['multiDevice'] == true || all[i].isOwner) &&
+                (q.isEmpty ||
                 all[i].id.contains(q) ||
                 all[i].name.toLowerCase().contains(q) ||
-                all[i].email.toLowerCase().contains(q))
+                all[i].email.toLowerCase().contains(q)))
               i,
         ];
         return ListView(
@@ -547,6 +840,16 @@ class _UsersState extends State<_Users> {
               decoration: _dec(context, 'ابحث بالاسم أو البريد أو ID…'),
             ),
             const SizedBox(height: 8),
+            if (widget.filter != 'all')
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  widget.filter == 'admins'
+                      ? 'المالك والمشرفون. اضغط على أي مستخدم من «المستخدمون» لمنحه صلاحية مشرف.'
+                      : 'الحسابات المسموح لها بعدة أجهزة. اضغط على حساب لفك ربط جهازه أو تغيير الإعداد.',
+                  style: AppTypography.caption.copyWith(color: c.inkMuted),
+                ),
+              ),
             Text('${idx.length} من ${all.length}', style: AppTypography.caption.copyWith(color: c.inkMuted)),
             const SizedBox(height: 8),
             for (final i in idx) ...[
