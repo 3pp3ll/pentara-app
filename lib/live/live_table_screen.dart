@@ -781,19 +781,18 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     final c = context.colors;
     final m = _member(e.seat);
     final name = c.memberName(e.seat);
-    // حد موحّد مع الزوايا، والحافة الملونة 3px داخل القص (حد غير موحّد لا يقبل زوايا).
+    // إطار كامل بلون العضو وظل خفيف بلونه، مثل إطار الخلاصة الذهبي.
+    final ring = e.seat.palette.discEnd;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: c.border),
+        border: Border.all(color: name.withAlpha(200), width: 1.4),
+        boxShadow: [BoxShadow(color: ring.withAlpha(38), blurRadius: 18, offset: const Offset(0, 6))],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: Container(
-          decoration: BoxDecoration(
-            color: c.surface,
-            border: BorderDirectional(start: BorderSide(color: name, width: 3)),
-          ),
+          color: c.surface,
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -825,26 +824,36 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     );
   }
 
+  /// لون طلبات المستخدم: بنفسجي خارج ألوان الأعضاء حتى يتميّز عنهم.
+  static const _userInk = Color(0xFF7B4FB8);
+
   Widget _userBubble(BuildContext context, String label, String text) {
     final c = context.colors;
-    return Align(
-      alignment: AlignmentDirectional.centerEnd,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 320),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: c.surfaceSoft,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: c.goldLine),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: AppTypography.caption.copyWith(color: c.goldText)),
-            const SizedBox(height: 4),
-            Text(text, style: AppTypography.body.copyWith(color: c.ink)),
-          ],
-        ),
+    // بعرض المستطيل كاملاً مثل بطاقات الأعضاء، وبنفس المسافات.
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(_userInk.withAlpha(14), c.surface),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _userInk.withAlpha(190), width: 1.4),
+        boxShadow: [BoxShadow(color: _userInk.withAlpha(30), blurRadius: 18, offset: const Offset(0, 6))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: c.brightness == Brightness.dark ? const Color(0xFF3A3F55) : const Color(0xFFE9E9EE),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(label,
+                style: AppTypography.caption.copyWith(color: c.ink, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 8),
+          Text(text, style: AppTypography.body.copyWith(color: c.ink)),
+        ],
       ),
     );
   }
