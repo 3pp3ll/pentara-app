@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -47,10 +48,20 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     super.initState();
     _syncFields();
     hub.addListener(_syncFields);
+    // حارس: إذا ما تقدّمت الجلسة 5 دقائق (انقطع الاتصال أو نام الجوال) تتوقف ويظهر «استمرار».
+    _watchdog = Timer.periodic(const Duration(seconds: 20), (_) {
+      final s = hub.current;
+      if (s.running && DateTime.now().difference(s.lastProgress) > const Duration(minutes: 5)) {
+        s.interrupt('انقطعت الجلسة بدون رد لأكثر من 5 دقائق. اضغط «استمرار» لتكمل من نفس النقطة.');
+      }
+    });
   }
+
+  Timer? _watchdog;
 
   @override
   void dispose() {
+    _watchdog?.cancel();
     hub.removeListener(_syncFields);
     _idea.dispose();
     _note.dispose();
@@ -284,6 +295,8 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                       const SizedBox(height: 10),
                     ],
                   ],
+                  // حالة واضحة أسفل الجلسة دائماً وهي تعمل: من باقي، وزر إيقاف.
+                  if (s.discussing) _runningBar(context, s),
                   if (s.phase == LivePhase.summary) _waiting(context, 'رئيس الجلسة يكتب الخلاصة…'),
                   if (s.summary.isNotEmpty) _summary(context, s.summary, 'الخلاصة الموحّدة', cut: s.summaryCut),
                   for (final r in s.revisions) ...[
@@ -858,6 +871,28 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     );
   }
 
+  Widget _runningBar(BuildContext context, LiveSession s) {
+    final c = context.colors;
+    final left = s.entries.where((e) => e.pending).map((e) => LiveSession.seatTitle(e.seat)).toList();
+    return Row(
+      children: [
+        Expanded(
+          child: _waiting(
+            context,
+            left.isEmpty
+                ? 'ينتقل النقاش للمرحلة التالية…'
+                : '${s.phase == LivePhase.round2 ? 'جولة التصحيح' : 'الجولة الأولى'}: باقي ${left.join('، ')}',
+          ),
+        ),
+        TextButton.icon(
+          onPressed: s.stop,
+          icon: Icon(Icons.stop_circle_outlined, size: 18, color: c.goldText),
+          label: Text('إيقاف', style: AppTypography.label.copyWith(color: c.goldText)),
+        ),
+      ],
+    );
+  }
+
   Widget _waiting(BuildContext context, String text) {
     final c = context.colors;
     return Padding(
@@ -870,7 +905,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             child: CircularProgressIndicator(strokeWidth: 2, color: c.goldLine),
           ),
           const SizedBox(width: 8),
-          Text(text, style: AppTypography.label.copyWith(color: c.inkMuted)),
+          Flexible(child: Text(text, style: AppTypography.label.copyWith(color: c.inkMuted))),
         ],
       ),
     );
