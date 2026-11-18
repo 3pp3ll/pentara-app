@@ -131,8 +131,6 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
   void _syncTableVisibility() {
     final visible = _index == _tableTabIndex && _resumed;
     _app?.setTableVisible(visible);
-    // بعد الخروج من الطاولة أو من التطبيق تُطوى الجلسة وتظهر قائمة الجلسات.
-    if (!visible) LiveHub.instance.collapse();
   }
 
   /// سجل التبويبات: زر الرجوع في الجوال يعود للتبويب السابق، ثم للرئيسية، ثم يخرج.
