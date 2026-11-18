@@ -124,6 +124,8 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _resumed = state == AppLifecycleState.resumed;
     _syncTableVisibility();
+    // عند الرجوع للتطبيق: يفحص التحديث (لا يعتمد على إغلاقه وفتحه من جديد).
+    if (_resumed && !AppUpdate.instance.available) AppUpdate.instance.check();
   }
 
   void _syncTableVisibility() {
