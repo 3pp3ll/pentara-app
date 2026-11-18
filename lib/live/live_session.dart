@@ -171,8 +171,21 @@ class LiveSession extends ChangeNotifier {
         LivePhase.failed => 'توقفت الجلسة',
       };
 
+  /// آخر تقدّم في الجلسة (رد وصل، مرحلة بدأت). يُستخدم لكشف الجلسة العالقة.
+  DateTime lastProgress = DateTime.now();
+
   void _notify() {
+    lastProgress = DateTime.now();
     if (!_disposed) notifyListeners();
+  }
+
+  /// إيقاف تلقائي لجلسة عالقة (انقطع الاتصال أو نام الجوال) مع زر «استمرار».
+  void interrupt(String message) {
+    if (!running) return;
+    stop();
+    error = message;
+    _notify();
+    Chime.attention();
   }
 
   @override
