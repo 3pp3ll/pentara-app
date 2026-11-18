@@ -905,10 +905,35 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: GoldButton.secondary(
-            label: 'ملف Word',
-            expand: true,
-            onTap: () => exportText(context, _s.title, text),
+          child: PopupMenuButton<ExportFormat>(
+            tooltip: 'حفظ كملف',
+            position: PopupMenuPosition.under,
+            color: context.colors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: context.colors.goldLine),
+            ),
+            onSelected: (f) => exportText(context, _s.title, text, format: f),
+            itemBuilder: (_) => [
+              for (final (f, label, icon, tone) in const [
+                (ExportFormat.word, 'Word (جداول حقيقية)', Icons.description_rounded, GlyphTone.blue),
+                (ExportFormat.pdf, 'PDF', Icons.picture_as_pdf_rounded, GlyphTone.copper),
+                (ExportFormat.txt, 'نص TXT', Icons.notes_rounded, GlyphTone.slate),
+              ])
+                PopupMenuItem(
+                  value: f,
+                  child: Row(
+                    children: [
+                      Glyph(icon, tone: tone, size: 30),
+                      const SizedBox(width: 10),
+                      Text(label, style: AppTypography.label.copyWith(color: context.colors.ink)),
+                    ],
+                  ),
+                ),
+            ],
+            child: IgnorePointer(
+              child: GoldButton.secondary(label: 'حفظ ▾', expand: true, onTap: () {}),
+            ),
           ),
         ),
       ],

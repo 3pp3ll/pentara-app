@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import 'doc_export.dart';
+import 'pdf_export.dart';
 
 /// سهمان عائمان: «للأعلى» يظهر بعد النزول، و«للأسفل» يظهر إذا بقي محتوى تحت
 /// (مثل نقاش طويل ما زال يُكتب). يوضع داخل Stack فوق القائمة.
@@ -114,19 +115,29 @@ class _ScrollTopButtonState extends State<ScrollTopButton> {
   }
 }
 
-/// حفظ نص الخلاصة كملف .txt عبر قائمة المشاركة (حفظ في الملفات/التنزيلات أو إرسال)،
-/// وإن تعذّر يُنسخ النص.
-Future<void> exportText(BuildContext context, String title, String text) async {
+/// صيغ حفظ الخلاصة.
+enum ExportFormat { word, pdf, txt }
+
+/// حفظ الخلاصة كملف (Word بجداول حقيقية، أو PDF، أو نص) عبر قائمة المشاركة
+/// (حفظ في الملفات/التنزيلات أو إرسال)، وإن تعذّر يُنسخ النص.
+Future<void> exportText(BuildContext context, String title, String text,
+    {ExportFormat format = ExportFormat.word}) async {
   final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|\n]'), ' ').trim();
-  final name = 'بنتارا - ${safe.isEmpty ? 'خلاصة' : safe}.doc';
+  final t = safe.isEmpty ? 'خلاصة' : safe;
   final messenger = ScaffoldMessenger.maybeOf(context);
   final c = context.colors;
   try {
-    await Share.shareXFiles(
-      // ملف Word: الجداول تظهر جداول حقيقية بحدود.
-      [XFile.fromData(utf8.encode('\uFEFF${toWordHtml(safe.isEmpty ? 'خلاصة' : safe, text)}'), mimeType: 'application/msword', name: name)],
-      subject: name,
-    );
+    final XFile file;
+    switch (format) {
+      case ExportFormat.word:
+        file = XFile.fromData(utf8.encode('\uFEFF${toWordHtml(t, text)}'),
+            mimeType: 'application/msword', name: 'بنتارا - $t.doc');
+      case ExportFormat.pdf:
+        file = XFile.fromData(await buildSummaryPdf(t, text), mimeType: 'application/pdf', name: 'بنتارا - $t.pdf');
+      case ExportFormat.txt:
+        file = XFile.fromData(utf8.encode(copyText(text)), mimeType: 'text/plain', name: 'بنتارا - $t.txt');
+    }
+    await Share.shareXFiles([file], subject: file.name);
   } catch (_) {
     await Clipboard.setData(ClipboardData(text: copyText(text)));
     messenger?.showSnackBar(SnackBar(
