@@ -20,6 +20,7 @@ dependencies:
   url_launcher: ^6.3.1
   web: ^1.1.0
   file_picker: ^10.3.3
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -27,6 +28,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # نغمات التنبيه (اكتمال الخلاصة، والحاجة للاستمرار).
+  assets:
+    - assets/sounds/
 
   # ملفات الخطوط يضعها صاحب الطاولة في assets/fonts/ قبل التشغيل.
   # قسم fonts: وحده يضمّها إلى حزمة الأصول؛ لا يُكرَّر المجلد تحت assets:.

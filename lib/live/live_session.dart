@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../theme/app_colors.dart';
+import 'chime.dart';
 import 'live_api.dart';
 
 /// نوع المخرج المطلوب من الطاولة.
@@ -265,7 +266,7 @@ class LiveSession extends ChangeNotifier {
 
   Future<void> _seat(LiveEntry e, List<Map<String, String>> messages, String kind) async {
     try {
-      final r = await _api.speak(seat: e.seat.name, kind: kind, messages: messages);
+      final r = await _api.speak(seat: e.seat.name, kind: kind, messages: messages, output: output.name);
       e.text = r.text.isEmpty ? '(لم يصل رد)' : r.text;
       e.error = null; // وصل الرد ولو بعد الإيقاف: يُحتفظ به ولا يُعاد طلبه
       costMicros += r.costMicros;
@@ -389,6 +390,7 @@ class LiveSession extends ChangeNotifier {
       error = r1.firstWhere((e) => e.error != null, orElse: () => r1.first).error ??
           'لم تصل ردود كافية';
       _notify();
+      Chime.attention();
       await save();
       return;
     }
@@ -425,6 +427,7 @@ class LiveSession extends ChangeNotifier {
       final r = await _api.speak(
         seat: MemberId.chair.name,
         kind: 'chair',
+        output: output.name,
         messages: [
           {
             'role': 'system',
@@ -454,6 +457,14 @@ class LiveSession extends ChangeNotifier {
       phase = LivePhase.failed;
     }
     _notify();
+    // نغمة: الخلاصة جاهزة للنسخ، أو تحتاج «استمرار» (انقطعت أو تعذّرت).
+    if (!_stopped) {
+      if (phase == LivePhase.done && !summaryCut) {
+        Chime.done();
+      } else {
+        Chime.attention();
+      }
+    }
     if (phase == LivePhase.done) await save();
   }
 
@@ -495,6 +506,7 @@ class LiveSession extends ChangeNotifier {
     rev.pending = false;
     phase = LivePhase.done;
     _notify();
+    if (!_stopped) rev.error == null ? Chime.done() : Chime.attention();
     if (rev.error == null) await save();
   }
 }

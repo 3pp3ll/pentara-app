@@ -92,6 +92,11 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
       setState(() {});
       return;
     }
+    final msg = _outputBlock(s.output);
+    if (msg != null) {
+      _toast(msg);
+      return;
+    }
     await s.start();
     if (!mounted || !identical(s, _s)) return;
     if (s.phase == LivePhase.done) {
@@ -201,6 +206,15 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     return Scaffold(backgroundColor: c.bg, body: SafeArea(child: body));
   }
 
+  /// حدود المخرجات: تطبيق فلاتر للباقات فقط، وصفحة الويب تحتاج رصيداً أكبر من 5 دولار.
+  String? _outputBlock(LiveOutput o) {
+    final u = LiveController.instance.user;
+    if (u == null) return null;
+    if (o == LiveOutput.appIdea && !u.guest && !u.hasPlan) return 'تطبيقات فلاتر متاحة في الباقات فقط';
+    if (o == LiveOutput.web && u.balanceMicros <= 5000000) return 'المبلغ لا يكفي لإنشاء الطلب';
+    return null;
+  }
+
   /// لا يمكن بدء جلسة جديدة: الزائر استخدم تجربته، أو المسجّل بلا باقة.
   bool get _blocked {
     final live = LiveController.instance;
@@ -208,7 +222,8 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     if (live.isGuest) {
       return LiveHub.instance.sessions.isNotEmpty || (live.user?.balanceMicros ?? 0) <= 0;
     }
-    if (live.isRegistered) return !(live.user?.hasPlan ?? false);
+    // بدون باقة يكفي وجود رصيد (يضيفه المالك للتجربة) فيعمل بالنماذج العادية.
+    if (live.isRegistered) return !(live.user?.hasPlan ?? false) && (live.user?.balanceMicros ?? 0) <= 0;
     return false; // غير مسجّل: يبدأ كزائر
   }
 
@@ -217,7 +232,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     if (live.isGuest) {
       return 'انتهت تجربتك المجانية (مشروع واحد). سجّل حسابك لتحفظ جلستك وتكمل بمشاريع أكثر.';
     }
-    return 'فعّل باقتك بالكود من المتجر لتبدأ جلسات جديدة.';
+    return 'رصيدك انتهى. فعّل باقتك بالكود من المتجر لتبدأ جلسات جديدة.';
   }
 
   Widget _page(BuildContext context) {
@@ -578,7 +593,11 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                     ),
                     child: InkWell(
                       customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      onTap: () => setState(() => s.output = o),
+                      onTap: () {
+                        final msg = _outputBlock(o);
+                        if (msg != null) _toast(msg);
+                        setState(() => s.output = o);
+                      },
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                         child: Column(

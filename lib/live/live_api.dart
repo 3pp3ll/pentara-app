@@ -431,11 +431,12 @@ class LiveController extends ChangeNotifier {
     required String kind,
     required List<Map<String, String>> messages,
     bool code = false,
+    String? output,
   }) async {
     final data = await _send(
       'POST',
       '/api/chat',
-      body: {'seat': seat, 'kind': kind, 'messages': messages, 'code': code},
+      body: {'seat': seat, 'kind': kind, 'messages': messages, 'code': code, if (output != null) 'output': output},
       timeout: const Duration(minutes: 4),
     );
     final reply = SeatReply(
