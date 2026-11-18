@@ -226,7 +226,9 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     final live = LiveController.instance;
     final canRun = !_blocked || s.phase != LivePhase.idle;
     // الزائر: مداخلة أثناء النقاش فقط، والتعديل بعد التسجيل.
-    final showInput = live.user != null &&
+    final collapsed = hub.collapsed && s.phase != LivePhase.idle;
+    final showInput = !collapsed &&
+        live.user != null &&
         (s.discussing || (live.isRegistered && (s.phase == LivePhase.done || s.phase == LivePhase.revising)));
 
     return Column(
@@ -239,11 +241,18 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
-              if (!canRun && s.phase == LivePhase.idle) ...[
+              if (collapsed)
+                ..._sessionList(context)
+              else if (!canRun && s.phase == LivePhase.idle) ...[
                 Text(_blockedText, style: AppTypography.body.copyWith(color: c.inkMuted)),
                 const SizedBox(height: 12),
                 const LiveAccountCard(),
               ] else ...[
+                if (s.phase != LivePhase.idle) ...[
+                  _sessionTile(context, id: s.id, title: s.title, output: s.output, status: _statusOf(s),
+                      when: s.createdAt, open: true, onTap: hub.collapse),
+                  const SizedBox(height: 10),
+                ],
                 if (s.phase == LivePhase.idle) _composer(context) else _ideaCard(context),
                 if (s.phase != LivePhase.idle) ...[
                   const SizedBox(height: 20),
@@ -312,6 +321,136 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
         ),
         if (showInput) _inputBar(context),
       ],
+    );
+  }
+
+  String _statusOf(LiveSession s) => s.running ? 'running' : (s.phase == LivePhase.done ? 'done' : 'stopped');
+
+  /// القائمة المطويّة: كل جلسة صف بسهم، الضغط يفتحها كاملة.
+  List<Widget> _sessionList(BuildContext context) {
+    final c = context.colors;
+    final s = _s;
+    final rows = [
+      if (!hub.sessions.any((m) => m.id == s.id))
+        SessionMeta(
+          id: s.id,
+          title: s.title,
+          output: s.output,
+          createdAt: s.createdAt,
+          costMicros: s.costMicros,
+          status: _statusOf(s),
+        ),
+      ...hub.sessions,
+    ];
+    return [
+      Row(
+        children: [
+          Expanded(child: Text('جلساتك', style: AppTypography.title.copyWith(color: c.ink))),
+          GoldButton.secondary(label: 'جلسة جديدة', onTap: hub.newSession),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text('اضغط على أي جلسة لفتحها كاملة، واضغط عليها مرة ثانية لطيّها.',
+          style: AppTypography.caption.copyWith(color: c.inkMuted)),
+      const SizedBox(height: 12),
+      for (final m in rows) ...[
+        _sessionTile(
+          context,
+          id: m.id,
+          title: m.title,
+          output: m.output,
+          status: m.id == s.id ? _statusOf(s) : m.status,
+          when: m.createdAt,
+          open: false,
+          onTap: () async {
+            final ok = await hub.open(m.id);
+            if (!mounted) return;
+            if (ok) {
+              hub.expand();
+              if (_scroll.hasClients) _scroll.jumpTo(0);
+            } else {
+              _toast('تعذّر فتح الجلسة. تحقق من الاتصال');
+            }
+          },
+        ),
+        const SizedBox(height: 8),
+      ],
+    ];
+  }
+
+  /// صف جلسة بلون حالتها وسهم فتح/طي.
+  Widget _sessionTile(
+    BuildContext context, {
+    required String id,
+    required String title,
+    required LiveOutput output,
+    required String status,
+    required DateTime when,
+    required bool open,
+    required VoidCallback onTap,
+  }) {
+    final c = context.colors;
+    final tone = status == 'running' ? c.info : (status == 'done' ? c.ok : c.warn);
+    final label = status == 'running' ? 'جارية' : (status == 'done' ? 'مكتملة' : 'متوقفة');
+    final d = '${when.year}/${when.month.toString().padLeft(2, '0')}/${when.day.toString().padLeft(2, '0')}';
+    return Material(
+      color: Color.alphaBlend(tone.bg.withAlpha(open ? 110 : 70), c.surface),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: tone.ink.withAlpha(140), width: 1.3),
+      ),
+      child: InkWell(
+        customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          child: Row(
+            children: [
+              Glyph(CategorySummary.icons[output]!, tone: outputTone(output.index), size: 38),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title.isEmpty ? 'جلسة' : title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.bodyStrong.copyWith(color: c.ink, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                          decoration: BoxDecoration(color: tone.bg, borderRadius: BorderRadius.circular(999)),
+                          child: Text(label,
+                              style: AppTypography.caption
+                                  .copyWith(color: tone.ink, fontWeight: FontWeight.w600, fontSize: 11)),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text('${output.label} · ',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption.copyWith(color: c.inkMuted)),
+                        ),
+                        Directionality(
+                          textDirection: TextDirection.ltr,
+                          child: Text(d, style: latinFigures(AppTypography.caption).copyWith(color: c.inkMuted)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedRotation(
+                turns: open ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(Icons.keyboard_arrow_down_rounded, color: c.goldText, size: 28),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

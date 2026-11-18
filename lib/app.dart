@@ -127,7 +127,10 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
   }
 
   void _syncTableVisibility() {
-    _app?.setTableVisible(_index == _tableTabIndex && _resumed);
+    final visible = _index == _tableTabIndex && _resumed;
+    _app?.setTableVisible(visible);
+    // بعد الخروج من الطاولة أو من التطبيق تُطوى الجلسة وتظهر قائمة الجلسات.
+    if (!visible) LiveHub.instance.collapse();
   }
 
   /// سجل التبويبات: زر الرجوع في الجوال يعود للتبويب السابق، ثم للرئيسية، ثم يخرج.
@@ -210,6 +213,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     final ok = await LiveHub.instance.open(id);
     if (!mounted) return;
     if (ok) {
+      LiveHub.instance.expand();
       _select(_tableTabIndex);
     } else {
       _notify('تعذّر فتح الجلسة. تحقق من الاتصال');

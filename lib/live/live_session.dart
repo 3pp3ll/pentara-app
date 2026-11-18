@@ -537,12 +537,29 @@ class LiveHub extends ChangeNotifier {
 
   List<SessionMeta> sessions = const [];
   bool loading = false;
+
+  /// الطاولة تعرض قائمة الجلسات مطويّة بدل الجلسة الكاملة (بعد الخروج من الشاشة أو التطبيق).
+  bool collapsed = false;
+
+  /// تطوي الجلسة الحالية إن لم تكن تعمل الآن.
+  void collapse() {
+    if (collapsed || _current.running || _current.phase == LivePhase.idle) return;
+    collapsed = true;
+    notifyListeners();
+  }
+
+  void expand() {
+    if (!collapsed) return;
+    collapsed = false;
+    notifyListeners();
+  }
   String? error;
 
   // الجلسة السابقة لا تُتلف هنا: قد تكون واجهة ما زالت تستمع لها حتى إعادة البناء،
   // وإن كانت تعمل فستكمل وتُحفظ في الخلفية.
   void _swap(LiveSession s) {
     _current = s;
+    collapsed = false;
     notifyListeners();
   }
 

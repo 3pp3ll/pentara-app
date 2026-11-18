@@ -54,6 +54,7 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
     final ok = await hub.open(m.id);
     if (!mounted) return;
     if (ok) {
+      hub.expand();
       widget.onOpened();
     } else {
       _toast('تعذّر فتح الجلسة. تحقق من الاتصال');
