@@ -28,35 +28,56 @@ class BottomNav extends StatelessWidget {
     _NavSpec('حسابي', _NavKind.account),
   ];
 
+  /// ارتفاع الجزء البارز فوق الشريط (يُحجز شفافاً حتى يستجيب القرص كله للمس).
+  static const double _lift = 24;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: c.surface,
-        border: Border(top: BorderSide(color: c.border, width: 1)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            for (var i = 0; i < _items.length; i++)
-              Expanded(
-                child: _items[i].kind == _NavKind.projects
-                    ? _RaisedItem(
-                        spec: _items[i],
-                        selected: i == currentIndex,
-                        onTap: () => onTap(i),
-                      )
-                    : _NavItem(
-                        spec: _items[i],
-                        selected: i == currentIndex,
-                        onTap: () => onTap(i),
-                      ),
+    final center = _items.indexWhere((x) => x.kind == _NavKind.projects);
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: _lift),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: c.surface,
+              border: Border(top: BorderSide(color: c.border, width: 1)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  for (var i = 0; i < _items.length; i++)
+                    Expanded(
+                      child: i == center
+                          ? _RaisedLabel(
+                              spec: _items[i],
+                              selected: i == currentIndex,
+                              onTap: () => onTap(i),
+                            )
+                          : _NavItem(
+                              spec: _items[i],
+                              selected: i == currentIndex,
+                              onTap: () => onTap(i),
+                            ),
+                    ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
-      ),
+        Positioned(
+          top: 0,
+          child: _RaisedDisc(
+            spec: _items[center],
+            selected: center == currentIndex,
+            onTap: () => onTap(center),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -202,9 +223,9 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-/// زر «المشاريع» البارز في وسط الشريط: قرص ذهبي متدرج يعلو الشريط بحلقة بلون السطح.
-class _RaisedItem extends StatelessWidget {
-  const _RaisedItem({required this.spec, required this.selected, required this.onTap});
+/// قرص «المشاريع» البارز: ذهبي متدرج يعلو الشريط بحلقة بلون السطح، وكله يستجيب للمس.
+class _RaisedDisc extends StatelessWidget {
+  const _RaisedDisc({required this.spec, required this.selected, required this.onTap});
 
   final _NavSpec spec;
   final bool selected;
@@ -221,60 +242,74 @@ class _RaisedItem extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
+        child: AnimatedScale(
+          scale: selected ? 1.06 : 1,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutBack,
+          child: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: c.surface, width: 4),
+              gradient: const LinearGradient(
+                begin: AppColors.disc145Begin,
+                end: AppColors.disc145End,
+                colors: [AppColors.goldLight, AppColors.goldDiscStart, AppColors.goldDeep],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.goldDeep.withAlpha(selected ? 110 : 70),
+                  blurRadius: selected ? 18 : 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: 26,
+              height: 26,
+              child: CustomPaint(
+                painter: _NavIconPainter(kind: spec.kind, color: AppColors.onGold),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// خانة «المشاريع» داخل الشريط: التسمية فقط (القرص فوقها)، وتستجيب للمس أيضاً.
+class _RaisedLabel extends StatelessWidget {
+  const _RaisedLabel({required this.spec, required this.selected, required this.onTap});
+
+  final _NavSpec spec;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return ExcludeSemantics(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
         child: SizedBox(
           height: 72,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.topCenter,
-            children: [
-              Positioned(
-                top: -24,
-                child: AnimatedScale(
-                  scale: selected ? 1.06 : 1,
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutBack,
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: c.surface, width: 4),
-                      gradient: const LinearGradient(
-                        begin: AppColors.disc145Begin,
-                        end: AppColors.disc145End,
-                        colors: [AppColors.goldLight, AppColors.goldDiscStart, AppColors.goldDeep],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.goldDeep.withAlpha(selected ? 110 : 70),
-                          blurRadius: selected ? 18 : 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: CustomPaint(
-                        painter: _NavIconPainter(kind: spec.kind, color: AppColors.onGold),
-                      ),
-                    ),
-                  ),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                spec.label,
+                style: AppTypography.caption.copyWith(
+                  color: c.goldText,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  height: 1.3,
                 ),
               ),
-              Positioned(
-                bottom: 8,
-                child: Text(
-                  spec.label,
-                  style: AppTypography.caption.copyWith(
-                    color: c.goldText,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
