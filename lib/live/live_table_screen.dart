@@ -15,6 +15,7 @@ import '../widgets/project_card.dart' show latinFigures;
 import 'live_account_card.dart';
 import 'live_api.dart';
 import 'live_session.dart';
+import 'doc_export.dart';
 import 'live_stats.dart';
 import 'rich_text_view.dart';
 import 'scroll_top.dart';
@@ -884,7 +885,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
         label: 'نسخ (مرة واحدة)',
         expand: true,
         onTap: () {
-          Clipboard.setData(ClipboardData(text: text));
+          Clipboard.setData(ClipboardData(text: copyText(text)));
           setState(() => s.guestCopied = true);
           _toast('نُسخت الخلاصة. سجّل لتنسخ وتصدّر متى شئت');
         },
@@ -897,7 +898,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
             label: 'نسخ',
             expand: true,
             onTap: () {
-              Clipboard.setData(ClipboardData(text: text));
+              Clipboard.setData(ClipboardData(text: copyText(text)));
               _toast('نُسخت الخلاصة كاملة');
             },
           ),
@@ -905,7 +906,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
         const SizedBox(width: 8),
         Expanded(
           child: GoldButton.secondary(
-            label: 'حفظ كملف',
+            label: 'ملف Word',
             expand: true,
             onTap: () => exportText(context, _s.title, text),
           ),

@@ -140,8 +140,35 @@ class RichTextView extends StatelessWidget {
   }
 
   Widget _table(BuildContext context, List<List<String>> rows, TextStyle base) {
+    return LayoutBuilder(builder: (context, box) {
+      final cols = rows.map((r) => r.length).reduce((a, b) => a > b ? a : b);
+      // الجوال: جدول بعمود نص طويل يصير قائمة منسدلة (كل صف بطاقة تنفتح بتفاصيلها).
+      if (box.maxWidth < 600 && cols >= 2 && rows.length >= 2) {
+        return _MobileTable(rows: rows, cols: cols);
+      }
+      return _wideTable(context, rows, cols);
+    });
+  }
+
+  /// عرض كل عمود حسب طول نصه: الأعمدة القصيرة صغيرة، والطويل يأخذ المساحة.
+  static Map<int, TableColumnWidth> _widths(List<List<String>> rows, int cols) {
+    final avg = List<double>.filled(cols, 0);
+    for (var k = 0; k < cols; k++) {
+      var sum = 0;
+      var n = 0;
+      for (final r in rows.skip(1)) {
+        if (k < r.length) {
+          sum += r[k].length;
+          n++;
+        }
+      }
+      avg[k] = n == 0 ? 4 : sum / n;
+    }
+    return {for (var k = 0; k < cols; k++) k: FlexColumnWidth(avg[k].clamp(4, 60).toDouble())};
+  }
+
+  Widget _wideTable(BuildContext context, List<List<String>> rows, int cols) {
     final c = context.colors;
-    final cols = rows.map((r) => r.length).reduce((a, b) => a > b ? a : b);
     final small = AppTypography.label.copyWith(color: c.ink);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -151,11 +178,8 @@ class RichTextView extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Table(
-        columnWidths: {
-          for (var k = 0; k < cols; k++)
-            k: k == 0 ? const FlexColumnWidth(2) : const FlexColumnWidth(1),
-        },
-        border: TableBorder(horizontalInside: BorderSide(color: c.border)),
+        columnWidths: _widths(rows, cols),
+        border: TableBorder(horizontalInside: BorderSide(color: c.border), verticalInside: BorderSide(color: c.border)),
         children: [
           for (var r = 0; r < rows.length; r++)
             TableRow(
@@ -171,6 +195,130 @@ class RichTextView extends StatelessWidget {
                   ),
               ],
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// جدول الجوال: صف لكل عنصر بقيمه القصيرة وسهم؛ الضغط يفتح النص الطويل بعرض الشاشة
+/// ويقفل المفتوح قبله تلقائياً.
+class _MobileTable extends StatefulWidget {
+  const _MobileTable({required this.rows, required this.cols});
+
+  final List<List<String>> rows;
+  final int cols;
+
+  @override
+  State<_MobileTable> createState() => _MobileTableState();
+}
+
+class _MobileTableState extends State<_MobileTable> {
+  int? _open;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final head = widget.rows.first;
+    final data = widget.rows.skip(1).toList();
+    // العمود الأطول نصاً هو التفاصيل، والباقي يظهر في رأس البطاقة.
+    var longK = widget.cols - 1;
+    var best = -1.0;
+    for (var k = 0; k < widget.cols; k++) {
+      var sum = 0;
+      for (final r in data) {
+        if (k < r.length) sum += r[k].length;
+      }
+      final a = data.isEmpty ? 0.0 : sum / data.length;
+      if (a > best) {
+        best = a;
+        longK = k;
+      }
+    }
+    String cell(List<String> r, int k) => k < r.length ? r[k] : '';
+    final small = AppTypography.label.copyWith(color: c.ink);
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // رأس الأعمدة صغير
+          Container(
+            color: c.surfaceSoft,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            child: Row(
+              children: [
+                for (var k = 0; k < widget.cols; k++)
+                  if (k != longK)
+                    Expanded(
+                      child: Text(cell(head, k),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.caption.copyWith(color: c.inkMuted, fontWeight: FontWeight.w600)),
+                    ),
+                Icon(Icons.unfold_more_rounded, size: 16, color: c.inkMuted),
+              ],
+            ),
+          ),
+          for (var r = 0; r < data.length; r++) ...[
+            Divider(height: 1, color: c.border),
+            InkWell(
+              onTap: () => setState(() => _open = _open == r ? null : r),
+              child: Container(
+                color: _open == r ? c.surfaceSoft.withAlpha(140) : null,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    for (var k = 0; k < widget.cols; k++)
+                      if (k != longK)
+                        Expanded(
+                          child: Text.rich(
+                            RichTextView._inline(
+                              cell(data[r], k),
+                              k == 0 || (longK == 0 && k == 1)
+                                  ? small.copyWith(fontWeight: FontWeight.w700)
+                                  : small.copyWith(color: c.goldText, fontWeight: FontWeight.w600),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    AnimatedRotation(
+                      turns: _open == r ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(Icons.keyboard_arrow_down_rounded, color: c.goldText),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: _open == r
+                  ? Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+                      color: c.surfaceSoft.withAlpha(140),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(cell(head, longK),
+                              style: AppTypography.caption.copyWith(color: c.inkMuted, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 2),
+                          Text.rich(RichTextView._inline(cell(data[r], longK), AppTypography.body.copyWith(color: c.ink, height: 1.6))),
+                        ],
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
         ],
       ),
     );
