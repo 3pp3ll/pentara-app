@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
@@ -120,7 +121,7 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  _hero(context, u?.displayName ?? ''),
+                  _hero(context, u?.name.trim() ?? ''),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -135,6 +136,8 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
                     const SizedBox(height: 8),
                     Text(_err(snap.error!), style: AppTypography.caption.copyWith(color: _danger)),
                   ],
+                  const SizedBox(height: 12),
+                  _webPanel(context),
                   const SizedBox(height: 16),
                   GridView.builder(
                     shrinkWrap: true,
@@ -168,6 +171,61 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  /// لوحة الموقع تفتح داخل التطبيق (متصفح مدمج) وتدخل تلقائياً بحسابك.
+  Future<void> _openWeb() async {
+    final uri = Uri.parse(live.webAdminUrl);
+    var ok = false;
+    try {
+      ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+    } catch (_) {}
+    if (!ok) {
+      try {
+        ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+    }
+    if (!ok && mounted) _toast(context, 'تعذّر فتح لوحة الموقع');
+  }
+
+  Widget _webPanel(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: c.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: c.goldLine.withAlpha(150)),
+      ),
+      child: InkWell(
+        customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        onTap: _openWeb,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: _tealGradient),
+                child: const Icon(Icons.language_rounded, color: Colors.white, size: 28),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('لوحة التحكم على الموقع', style: AppTypography.bodyStrong.copyWith(color: c.ink)),
+                    Text('تفتح هنا وتدخل بحسابك، وأي تعديل يُحفظ في الموقع',
+                        style: AppTypography.caption.copyWith(color: c.inkMuted)),
+                  ],
+                ),
+              ),
+              Icon(Icons.open_in_new_rounded, color: c.goldText, size: 22),
+            ],
+          ),
         ),
       ),
     );

@@ -133,6 +133,9 @@ class LiveController extends ChangeNotifier {
       isRegistered && _user!.name.trim().isNotEmpty ? _user!.name.trim() : guestName;
 
   String? _login;
+
+  /// رابط لوحة التحكم على الموقع مع دخول تلقائي بحساب التطبيق (الرمز في # فلا يصل لأي سجل خادم).
+  String get webAdminUrl => '$kServerUrl/admin${_login == null ? '' : '#app=${Uri.encodeComponent(_login!)}'}';
   LiveUser? _user;
   bool _busy = false;
   bool _ready = false;
