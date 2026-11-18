@@ -165,15 +165,15 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                       hintStyle: AppTypography.body.copyWith(color: c.inkMuted),
                       filled: true,
                       fillColor: c.surface,
-                      prefixIcon: Icon(Icons.search_rounded, color: c.inkMuted),
+                      prefixIcon: Icon(Icons.search_rounded, color: c.goldText),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(999),
-                        borderSide: BorderSide(color: c.border),
+                        borderSide: BorderSide(color: c.goldLine),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(999),
-                        borderSide: BorderSide(color: c.border),
+                        borderSide: BorderSide(color: c.goldLine.withAlpha(170), width: 1.2),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(999),
@@ -186,9 +186,11 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _chip(context, 'الكل', _filter == null, () => setState(() => _filter = null)),
+                      _chip(context, 'الكل', Icons.apps_rounded, GlyphTone.gold, _filter == null,
+                          () => setState(() => _filter = null)),
                       for (final o in LiveOutput.values)
-                        _chip(context, o.label, _filter == o, () => setState(() => _filter = o)),
+                        _chip(context, o.label, CategorySummary.icons[o]!, outputTone(o.index), _filter == o,
+                            () => setState(() => _filter = o)),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -227,28 +229,52 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
     );
   }
 
-  Widget _chip(BuildContext context, String label, bool on, VoidCallback tap) {
+  /// فلتر بلون أيقونته في الصف العلوي: المختار متدرج، والباقي بحد ولون النوع.
+  Widget _chip(BuildContext context, String label, IconData icon, GlyphTone tone, bool on, VoidCallback tap) {
     final c = context.colors;
-    return ChoiceChip(
-      label: Text(label),
-      selected: on,
-      onSelected: (_) => tap(),
-      labelStyle: AppTypography.label.copyWith(color: on ? c.goldText : c.ink),
-      selectedColor: c.surfaceSoft,
-      backgroundColor: c.surface,
-      side: BorderSide(color: on ? c.goldLine : c.border),
-      showCheckmark: false,
+    final ink = tone.shadow;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: tap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            gradient: on ? tone.gradient : null,
+            color: on ? null : c.surface,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: on ? Colors.transparent : ink.withAlpha(150)),
+            boxShadow: on ? [BoxShadow(color: ink.withAlpha(60), blurRadius: 10, offset: const Offset(0, 4))] : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: on ? Colors.white : ink),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: AppTypography.label
+                      .copyWith(color: on ? Colors.white : c.ink, fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Widget _card(BuildContext context, SessionMeta m) {
     final c = context.colors;
-    final done = m.status == 'done';
+    final live = hub.current.id == m.id && hub.current.running;
+    final done = !live && m.status == 'done';
+    // لون الحالة: مكتملة أخضر، جارية أزرق، متوقفة كهرماني.
+    final status = live ? c.info : (done ? c.ok : c.warn);
+    final statusLabel = live ? 'جارية' : (done ? 'مكتملة' : 'متوقفة');
     return Material(
-      color: c.surface,
+      color: Color.alphaBlend(status.bg.withAlpha(70), c.surface),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: hub.current.id == m.id ? c.goldLine : c.border),
+        side: BorderSide(color: status.ink.withAlpha(140), width: 1.3),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -274,14 +300,12 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                           decoration: BoxDecoration(
-                            color: done ? const Color(0xFFE2F2EA) : const Color(0xFFFBEED6),
+                            color: status.bg,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            done ? 'مكتملة' : 'متوقفة',
-                            style: AppTypography.caption.copyWith(
-                              color: done ? const Color(0xFF1F6B4A) : const Color(0xFF7A4C00),
-                            ),
+                            statusLabel,
+                            style: AppTypography.caption.copyWith(color: status.ink, fontWeight: FontWeight.w600),
                           ),
                         ),
                         const SizedBox(width: 8),

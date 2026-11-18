@@ -42,11 +42,17 @@ class BottomNav extends StatelessWidget {
           children: [
             for (var i = 0; i < _items.length; i++)
               Expanded(
-                child: _NavItem(
-                  spec: _items[i],
-                  selected: i == currentIndex,
-                  onTap: () => onTap(i),
-                ),
+                child: _items[i].kind == _NavKind.projects
+                    ? _RaisedItem(
+                        spec: _items[i],
+                        selected: i == currentIndex,
+                        onTap: () => onTap(i),
+                      )
+                    : _NavItem(
+                        spec: _items[i],
+                        selected: i == currentIndex,
+                        onTap: () => onTap(i),
+                      ),
               ),
           ],
         ),
@@ -189,6 +195,86 @@ class _NavItem extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// زر «المشاريع» البارز في وسط الشريط: قرص ذهبي متدرج يعلو الشريط بحلقة بلون السطح.
+class _RaisedItem extends StatelessWidget {
+  const _RaisedItem({required this.spec, required this.selected, required this.onTap});
+
+  final _NavSpec spec;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: spec.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          height: 72,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.topCenter,
+            children: [
+              Positioned(
+                top: -24,
+                child: AnimatedScale(
+                  scale: selected ? 1.06 : 1,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutBack,
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.surface, width: 4),
+                      gradient: const LinearGradient(
+                        begin: AppColors.disc145Begin,
+                        end: AppColors.disc145End,
+                        colors: [AppColors.goldLight, AppColors.goldDiscStart, AppColors.goldDeep],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.goldDeep.withAlpha(selected ? 110 : 70),
+                          blurRadius: selected ? 18 : 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CustomPaint(
+                        painter: _NavIconPainter(kind: spec.kind, color: AppColors.onGold),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 8,
+                child: Text(
+                  spec.label,
+                  style: AppTypography.caption.copyWith(
+                    color: c.goldText,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

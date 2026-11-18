@@ -239,38 +239,78 @@ class _MemberCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final label = member.id == MemberId.chair ? 'الرئيس' : member.title;
-    return Semantics(
-      label: '${member.title}، ${member.role}',
-      excludeSemantics: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    final desc = _missions[member.id] ?? member.role;
+    return Tooltip(
+      triggerMode: TooltipTriggerMode.tap,
+      preferBelow: false,
+      verticalOffset: 34,
+      showDuration: const Duration(seconds: 3),
+      waitDuration: Duration.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(
+        gradient: member.palette.disc,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: member.palette.discEnd.withAlpha(90), blurRadius: 16, offset: const Offset(0, 6)),
+        ],
+      ),
+      richMessage: TextSpan(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: member.palette.disc,
-            ),
-            child: MemberIcon(
-              symbol: member.symbol,
-              size: 22,
-              color: const Color(0xFFFFFFFF),
-            ),
+          TextSpan(
+            text: '${member.title}\n',
+            style: AppTypography.bodyStrong.copyWith(color: Colors.white, fontSize: 14),
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: AppTypography.caption.copyWith(color: c.memberName(member.id)),
+          TextSpan(
+            text: desc,
+            style: AppTypography.caption.copyWith(color: Colors.white.withAlpha(235), height: 1.5),
           ),
         ],
       ),
+      child: Semantics(
+        label: '${member.title}، ${member.role}',
+        hint: desc,
+        excludeSemantics: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: member.palette.disc,
+              ),
+              child: MemberIcon(
+                symbol: member.symbol,
+                size: 22,
+                color: const Color(0xFFFFFFFF),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppTypography.caption.copyWith(color: c.memberName(member.id)),
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  /// مهمة كل عضو تظهر في فقاعة فوق أيقونته عند الضغط.
+  static const Map<MemberId, String> _missions = {
+    MemberId.chair: 'يدير الجلسة ويوزّع الأدوار، ويكتب الخلاصة النهائية.',
+    MemberId.engineer: 'يبني الهيكل التقني وينظّم أجزاء الفكرة.',
+    MemberId.practical: 'يحوّل الفكرة إلى خطوات تنفيذ واقعية.',
+    MemberId.analyst: 'يقرأ الأرقام والسوق ويقيس الجدوى.',
+    MemberId.challenger: 'يتحدّى الفكرة ويكشف المخاطر قبل وقوعها.',
+    MemberId.auditor: 'يدقّق الصحة والاتساق قبل اعتماد النتيجة.',
+  };
 }
 
 /// صف واحد: ستة Expanded. حد المحتوى 6×44 = 264 (يلزم شاشة بعرض 312 مع
