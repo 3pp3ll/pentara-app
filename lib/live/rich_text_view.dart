@@ -32,12 +32,19 @@ class RichTextView extends StatelessWidget {
         final rows = <List<String>>[];
         while (i < lines.length && lines[i].trim().startsWith('|')) {
           final r = lines[i].trim();
-          final cells = r.substring(1, r.endsWith('|') ? r.length - 1 : r.length).split('|');
+          final cells = r.length < 2 ? <String>[''] : r.substring(1, r.endsWith('|') ? r.length - 1 : r.length).split('|');
           final isRule = cells.every((x) => RegExp(r'^\s*:?-{2,}:?\s*$').hasMatch(x));
           if (!isRule) rows.add(cells.map((x) => x.trim()).toList());
           i++;
         }
-        if (rows.isNotEmpty) out.add(_table(context, rows, base));
+        if (rows.isNotEmpty) {
+          try {
+            out.add(_table(context, rows, base));
+          } catch (_) {
+            // احتياط: لو تعذّر رسم الجدول يظهر نصه كما هو بدل أن تختفي الخلاصة.
+            out.add(Text(rows.map((r) => r.join(' | ')).join('\n'), style: base));
+          }
+        }
         continue;
       }
 

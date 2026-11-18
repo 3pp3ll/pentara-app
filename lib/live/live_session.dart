@@ -458,10 +458,16 @@ class LiveSession extends ChangeNotifier {
         ],
       );
       if (_stopped) return;
-      summary = r.text;
-      summaryCut = r.cut;
       costMicros += r.costMicros;
-      phase = LivePhase.done;
+      if (r.text.trim().isEmpty) {
+        // وصل رد فاضي (انقطع أو صرف النموذج حدّه في التفكير): لا نعتبرها مكتملة.
+        error = 'وصلت الخلاصة فاضية. اضغط «استمرار» لإعادة كتابتها.';
+        phase = LivePhase.failed;
+      } else {
+        summary = r.text;
+        summaryCut = r.cut;
+        phase = LivePhase.done;
+      }
     } on LiveException catch (err) {
       error = err.message;
       phase = LivePhase.failed;
