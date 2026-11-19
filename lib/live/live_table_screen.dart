@@ -264,7 +264,9 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
         Expanded(
           child: Stack(
             children: [
-              ListView(
+              // تحديد ونسخ أي نص في الجلسة (الأعضاء والخلاصة وطلباتك) باللمس المطوّل أو السحب.
+              SelectionArea(
+                child: ListView(
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
             children: [
@@ -343,6 +345,7 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                 ],
               ],
             ],
+              ),
               ),
               ScrollTopButton(controller: _scroll),
             ],

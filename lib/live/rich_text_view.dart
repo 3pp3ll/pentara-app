@@ -117,9 +117,9 @@ class RichTextView extends StatelessWidget {
       i++;
     }
 
-    return SelectionArea(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: out),
-    );
+    // التحديد يأتي من SelectionArea في الشاشة (حتى يمتد عبر البطاقات)، وإن لم توجد فهنا.
+    final col = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: out);
+    return SelectionContainer.maybeOf(context) == null ? SelectionArea(child: col) : col;
   }
 
   /// **عريض** و`كود` داخل السطر.
