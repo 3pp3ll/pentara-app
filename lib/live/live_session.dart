@@ -460,33 +460,10 @@ class LiveSession extends ChangeNotifier {
         error = 'وصلت الخلاصة فاضية. اضغط «استمرار» لإعادة كتابتها.';
         phase = LivePhase.failed;
       } else {
-        // الخلاصة الطويلة تنقطع عند حد الكلمات: نكمّلها تلقائياً حتى مرتين ونلصقها.
-        var text = r.text;
-        var cut = r.cut;
-        for (var k = 0; k < 2 && cut && !_stopped; k++) {
-          summary = text;
-          _notify();
-          final more = await _api.speak(
-            seat: MemberId.chair.name,
-            kind: 'chair',
-            output: output.name,
-            messages: [
-              ...base,
-              {'role': 'assistant', 'content': text},
-              {
-                'role': 'user',
-                'content': 'انقطعت الخلاصة عند هذا الحد. أكمل من آخر كلمة بالضبط، بدون تكرار أي جزء سبق وبدون مقدمة.',
-              },
-            ],
-          );
-          costMicros += more.costMicros;
-          if (more.text.trim().isEmpty) break;
-          text = '$text${more.text}';
-          cut = more.cut;
-        }
+        final text = await _complete(base, r.text, r.cut, (t) => summary = t);
         if (_stopped) return;
         summary = text;
-        summaryCut = cut;
+        summaryCut = _lastCut;
         phase = LivePhase.done;
       }
     } on LiveException catch (err) {
@@ -508,10 +485,91 @@ class LiveSession extends ChangeNotifier {
     if (phase == LivePhase.done) await save();
   }
 
+  bool _lastCut = false;
+
+  /// يكمّل نصاً انقطع عند حد الكلمات (حتى 6 مرات) ويلصق التكملة، ويعرضه وهو يكبر.
+  Future<String> _complete(
+      List<Map<String, String>> base, String text, bool cut, void Function(String) show) async {
+    for (var k = 0; k < 6 && cut && !_stopped; k++) {
+      show(text);
+      _notify();
+      final more = await _api.speak(
+        seat: MemberId.chair.name,
+        kind: 'chair',
+        output: output.name,
+        messages: [
+          ...base,
+          {'role': 'assistant', 'content': text},
+          {
+            'role': 'user',
+            'content': 'انقطع النص عند هذا الحد. أكمل من آخر كلمة بالضبط، بدون تكرار أي جزء سبق وبدون مقدمة. '
+                'إذا انقطع داخل جدول فأكمل الصف الناقص ثم بقية الجدول بنفس الأعمدة.',
+          },
+        ],
+      );
+      costMicros += more.costMicros;
+      if (more.text.trim().isEmpty) break;
+      text = '$text${more.text}';
+      cut = more.cut;
+    }
+    _lastCut = cut;
+    return text;
+  }
+
+  static final _continueAsk = RegExp(r'^\s*(أ|ا)?(كمل|كمّل|تابع|استمر|واصل)');
+
+  /// «أكمل الخلاصة»: يكمّل آخر خلاصة من حيث توقفت بدل إعادة كتابتها كاملة.
+  Future<void> _continueLatest() async {
+    error = null;
+    _stopped = false;
+    phase = LivePhase.revising;
+    _notify();
+    LiveRevision? found;
+    for (final r in revisions.reversed) {
+      if (!r.pending && r.error == null && r.summary.isNotEmpty) {
+        found = r;
+        break;
+      }
+    }
+    final rev = found;
+    try {
+      final base = <Map<String, String>>[
+        {
+          'role': 'system',
+          'content': '$_house\nأنت «رئيس الجلسة»: تكتب الخلاصة النهائية الموحّدة التي يعتمدها المستخدم.',
+        },
+        {'role': 'user', 'content': '$_task\n\nاكتب الخلاصة النهائية كاملة بعناوين وجداول واضحة.'},
+      ];
+      final text = await _complete(base, latestSummary, true, (t) {
+        if (rev == null) {
+          summary = t;
+        } else {
+          rev.summary = t;
+        }
+      });
+      if (_stopped) return;
+      if (rev == null) {
+        summary = text;
+        summaryCut = _lastCut;
+      } else {
+        rev.summary = text;
+      }
+    } on LiveException catch (err) {
+      error = err.message;
+    } catch (_) {
+      error = 'تعذّر إكمال الخلاصة';
+    }
+    phase = LivePhase.done;
+    _notify();
+    if (!_stopped) error == null ? Chime.done() : Chime.attention();
+    if (error == null) await save();
+  }
+
   /// طلب تعديل على الخلاصة: الرئيس يعيد كتابتها كاملة مع التعديل.
   Future<void> revise(String request) async {
     final req = request.trim();
     if (req.isEmpty || running || latestSummary.isEmpty) return;
+    if (_continueAsk.hasMatch(req) && req.length < 40) return _continueLatest();
     final rev = LiveRevision(request: req);
     final base = latestSummary;
     revisions.add(rev);
@@ -536,8 +594,19 @@ class LiveSession extends ChangeNotifier {
         ],
       );
       if (_stopped) return;
-      rev.summary = r.text;
       costMicros += r.costMicros;
+      rev.summary = await _complete(
+        [
+          {
+            'role': 'system',
+            'content': '$_house\nأنت «رئيس الجلسة». طبّق طلب التعديل وأعد كتابة الخلاصة كاملة.',
+          },
+          {'role': 'user', 'content': '$_task\n\nالخلاصة الحالية:\n$base\n\nطلب التعديل:\n$req'},
+        ],
+        r.text,
+        r.cut,
+        (t) => rev.summary = t,
+      );
     } on LiveException catch (err) {
       rev.error = err.message;
     } catch (_) {

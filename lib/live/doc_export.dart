@@ -64,12 +64,37 @@ String toWordHtml(String title, String md) {
         if (!cells.every(_rule.hasMatch)) rows.add(cells);
         i++;
       }
-      b.write('<table>');
+      // جدول بخصائص يفهمها Word (حدود وعرض أعمدة حسب طول النص، وصفوف متناوبة).
+      final cols = rows.map((r) => r.length).reduce((a, b) => a > b ? a : b);
+      final avg = List<double>.generate(cols, (k) {
+        var sum = 0;
+        var n = 0;
+        for (final r in rows.skip(1)) {
+          if (k < r.length) {
+            sum += r[k].length;
+            n++;
+          }
+        }
+        return (n == 0 ? 4.0 : sum / n).clamp(4, 60).toDouble();
+      });
+      final total = avg.fold<double>(0, (a, x) => a + x);
+      b.write('<table dir="rtl" border="1" cellspacing="0" cellpadding="6" width="100%" '
+          'style="border-collapse:collapse;width:100%;border:1px solid #BFAE7E">');
+      b.write('<colgroup>${avg.map((x) => '<col width="${(x / total * 100).round()}%">').join()}</colgroup>');
       for (var r = 0; r < rows.length; r++) {
         final tag = r == 0 ? 'th' : 'td';
-        b.write('<tr>${rows[r].map((x) => '<$tag>${_inlineHtml(x)}</$tag>').join()}</tr>');
+        final bg = r == 0 ? '#F4ECD8' : (r.isEven ? '#FBF8F1' : '#FFFFFF');
+        final cells = [for (var k = 0; k < cols; k++) k < rows[r].length ? rows[r][k] : ''];
+        var ci = -1;
+        b.write('<tr>${cells.map((x) {
+          ci++;
+          final w = r == 0 ? ' width="${(avg[ci] / total * 100).round()}%"' : '';
+          return '<$tag$w dir="rtl" style="border:1px solid #BFAE7E;padding:5pt 7pt;'
+            'text-align:right;vertical-align:top;background:$bg${r == 0 ? ';font-weight:bold' : ''}">'
+            '${_inlineHtml(x)}</$tag>';
+        }).join()}</tr>');
       }
-      b.write('</table>');
+      b.write('</table><p></p>');
       continue;
     }
     final h = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(line);
