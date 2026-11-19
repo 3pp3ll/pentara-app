@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -122,28 +124,58 @@ enum ExportFormat { word, pdf, txt }
 /// (حفظ في الملفات/التنزيلات أو إرسال)، وإن تعذّر يُنسخ النص.
 Future<void> exportText(BuildContext context, String title, String text,
     {ExportFormat format = ExportFormat.word}) async {
-  final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|\n]'), ' ').trim();
+  // اسم قصير: العنوان العربي الطويل يتجاوز حد طول اسم الملف في الجوال فيفشل الحفظ.
+  var safe = title.replaceAll(RegExp(r'[\\/:*?"<>|\n\r\t]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (safe.length > 40) safe = safe.substring(0, 40).trim();
   final t = safe.isEmpty ? 'خلاصة' : safe;
   final messenger = ScaffoldMessenger.maybeOf(context);
   final c = context.colors;
+  void say(String m) => messenger?.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: c.ink,
+        content: Text(m, style: AppTypography.label.copyWith(color: c.bg)),
+      ));
   try {
-    final XFile file;
+    final Uint8List bytes;
+    final String ext, mime;
     switch (format) {
       case ExportFormat.word:
-        file = XFile.fromData(utf8.encode('\uFEFF${toWordHtml(t, text)}'),
-            mimeType: 'application/msword', name: 'بنتارا - $t.doc');
+        bytes = Uint8List.fromList(utf8.encode('\uFEFF${toWordHtml(t, text)}'));
+        ext = 'doc';
+        mime = 'application/msword';
       case ExportFormat.pdf:
-        file = XFile.fromData(await buildSummaryPdf(t, text), mimeType: 'application/pdf', name: 'بنتارا - $t.pdf');
+        bytes = await buildSummaryPdf(t, text);
+        ext = 'pdf';
+        mime = 'application/pdf';
       case ExportFormat.txt:
-        file = XFile.fromData(utf8.encode(copyText(text)), mimeType: 'text/plain', name: 'بنتارا - $t.txt');
+        bytes = Uint8List.fromList(utf8.encode(copyText(text)));
+        ext = 'txt';
+        mime = 'text/plain';
     }
-    await Share.shareXFiles([file], subject: file.name);
-  } catch (_) {
+    final name = 'Pentara - $t.$ext';
+    if (!kIsWeb) {
+      // الجوال والكمبيوتر: نافذة «حفظ باسم» من النظام (تختار المجلد).
+      try {
+        final path = await FilePicker.platform.saveFile(
+          dialogTitle: 'حفظ الخلاصة',
+          fileName: name,
+          bytes: bytes,
+          type: FileType.custom,
+          allowedExtensions: [ext],
+        );
+        if (path != null) {
+          say('حُفظ الملف: $name');
+          return;
+        }
+        return; // ألغى المستخدم الحفظ.
+      } catch (_) {
+        // إن لم تتوفر نافذة الحفظ نكمل بقائمة المشاركة.
+      }
+    }
+    await Share.shareXFiles([XFile.fromData(bytes, mimeType: mime, name: name)], subject: name);
+  } catch (e) {
     await Clipboard.setData(ClipboardData(text: copyText(text)));
-    messenger?.showSnackBar(SnackBar(
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: c.ink,
-      content: Text('تعذّر حفظ الملف هنا، فنُسخت الخلاصة', style: AppTypography.label.copyWith(color: c.bg)),
-    ));
+    final why = e.toString();
+    say('تعذّر حفظ الملف، فنُسخت الخلاصة (${why.length > 80 ? why.substring(0, 80) : why})');
   }
 }

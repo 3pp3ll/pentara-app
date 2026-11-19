@@ -437,11 +437,7 @@ class LiveSession extends ChangeNotifier {
     phase = LivePhase.summary;
     _notify();
     try {
-      final r = await _api.speak(
-        seat: MemberId.chair.name,
-        kind: 'chair',
-        output: output.name,
-        messages: [
+      final base = <Map<String, String>>[
           {
             'role': 'system',
             'content': '$_house\nأنت «رئيس الجلسة»: تقيّم النقاش وتكتب الخلاصة النهائية الموحّدة '
@@ -455,8 +451,8 @@ class LiveSession extends ChangeNotifier {
                 'المخاطر وطريقة تجنبها، الخطوة التالية. لا تكتب كوداً.'
                 '${output == LiveOutput.web ? ' ولأن المخرج صفحة ويب: اكتب أقسام الصفحة بالترتيب ونص كل قسم جاهزاً للنشر.' : ''}',
           },
-        ],
-      );
+        ];
+      final r = await _api.speak(seat: MemberId.chair.name, kind: 'chair', output: output.name, messages: base);
       if (_stopped) return;
       costMicros += r.costMicros;
       if (r.text.trim().isEmpty) {
@@ -464,8 +460,33 @@ class LiveSession extends ChangeNotifier {
         error = 'وصلت الخلاصة فاضية. اضغط «استمرار» لإعادة كتابتها.';
         phase = LivePhase.failed;
       } else {
-        summary = r.text;
-        summaryCut = r.cut;
+        // الخلاصة الطويلة تنقطع عند حد الكلمات: نكمّلها تلقائياً حتى مرتين ونلصقها.
+        var text = r.text;
+        var cut = r.cut;
+        for (var k = 0; k < 2 && cut && !_stopped; k++) {
+          summary = text;
+          _notify();
+          final more = await _api.speak(
+            seat: MemberId.chair.name,
+            kind: 'chair',
+            output: output.name,
+            messages: [
+              ...base,
+              {'role': 'assistant', 'content': text},
+              {
+                'role': 'user',
+                'content': 'انقطعت الخلاصة عند هذا الحد. أكمل من آخر كلمة بالضبط، بدون تكرار أي جزء سبق وبدون مقدمة.',
+              },
+            ],
+          );
+          costMicros += more.costMicros;
+          if (more.text.trim().isEmpty) break;
+          text = '$text${more.text}';
+          cut = more.cut;
+        }
+        if (_stopped) return;
+        summary = text;
+        summaryCut = cut;
         phase = LivePhase.done;
       }
     } on LiveException catch (err) {
