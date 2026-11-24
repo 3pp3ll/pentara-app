@@ -36,6 +36,9 @@ class LiveTableScreen extends StatefulWidget {
 class _LiveTableScreenState extends State<LiveTableScreen> {
   final TextEditingController _idea = TextEditingController();
   final TextEditingController _note = TextEditingController();
+
+  /// صيغة الرد بعد الخلاصة: null = تعديل الخلاصة.
+  LiveOutput? _replyAs;
   final TextEditingController _sources = TextEditingController();
   final ScrollController _scroll = ScrollController();
   String _shownId = '';
@@ -162,12 +165,21 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
       return;
     }
     if (s.phase == LivePhase.done) {
+      final fmt = _replyAs == s.output ? null : _replyAs;
+      if (fmt != null) {
+        final msg = _outputBlock(fmt);
+        if (msg != null) {
+          _toast(msg);
+          return;
+        }
+      }
       _note.clear();
       _toBottom();
-      await s.revise(t);
+      await s.revise(t, fmt: fmt);
       if (!mounted || !identical(s, _s)) return;
       final last = s.revisions.isEmpty ? null : s.revisions.last;
-      _toast(last?.error == null ? 'طُبّق التعديل وحُفظ' : 'تعذّر التعديل: ${last!.error}');
+      final ok = fmt == null ? 'طُبّق التعديل وحُفظ' : 'وصل الرد بصيغة ${fmt.label} وحُفظ';
+      _toast(last?.error == null ? ok : 'تعذّر الطلب: ${last!.error}');
       _toBottom();
     }
   }
@@ -303,15 +315,16 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                   if (s.summary.isNotEmpty) _summary(context, s.summary, 'الخلاصة الموحّدة', cut: s.summaryCut),
                   for (final r in s.revisions) ...[
                     const SizedBox(height: 14),
-                    _userBubble(context, 'طلب تعديل', r.request),
+                    _userBubble(context, r.output == null ? 'طلب تعديل' : 'طلب جديد · ${r.output!.label}', r.request),
                     const SizedBox(height: 10),
                     if (r.pending)
-                      _waiting(context, 'رئيس الجلسة يطبّق التعديل…')
+                      _waiting(context,
+                          r.output == null ? 'رئيس الجلسة يطبّق التعديل…' : 'رئيس الجلسة يكتب الرد (${r.output!.label})…')
                     else if (r.error != null)
                       Text('تعذّر التعديل: ${r.error}',
                           style: AppTypography.label.copyWith(color: const Color(0xFFA8322E)))
                     else
-                      _summary(context, r.summary, 'الخلاصة بعد التعديل'),
+                      _summary(context, r.summary, r.output == null ? 'الخلاصة بعد التعديل' : 'الرد: ${r.output!.label}'),
                   ],
                   if (live.isGuest && s.phase == LivePhase.done) ...[
                     const SizedBox(height: 16),
@@ -729,8 +742,14 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
     final c = context.colors;
     final s = _s;
     final busy = s.phase == LivePhase.revising || s.phase == LivePhase.summary;
-    final hint = s.discussing ? 'تدخّل في النقاش… (يقرؤها الأعضاء)' : 'اطلب تعديلاً على الخلاصة…';
-    return Container(
+    final pick = !s.discussing && s.phase == LivePhase.done;
+    final fmt = _replyAs == s.output ? null : _replyAs;
+    final hint = s.discussing
+        ? 'تدخّل في النقاش… (يقرؤها الأعضاء)'
+        : fmt == null
+            ? 'اطلب تعديلاً على الخلاصة…'
+            : 'اكتب طلبك، والرد بيكون ${fmt.label}…';
+    final bar = Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       decoration: BoxDecoration(
         color: c.surface,
@@ -757,6 +776,53 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
           ),
         ],
       ),
+    );
+    if (!pick) return bar;
+    // بعد الخلاصة: اختيار صيغة الرد الجديد على نفس الجلسة.
+    final c2 = context.colors;
+    Widget chip(LiveOutput? o, String label) {
+      final on = (o == null && fmt == null) || (o != null && o == fmt);
+      return Padding(
+        padding: const EdgeInsetsDirectional.only(end: 6),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: on,
+          showCheckmark: false,
+          labelStyle: AppTypography.caption.copyWith(color: on ? c2.goldText : c2.ink, fontWeight: FontWeight.w600),
+          backgroundColor: c2.surface,
+          selectedColor: c2.surfaceSoft,
+          side: BorderSide(color: on ? c2.goldLine : c2.border),
+          shape: const StadiumBorder(),
+          onSelected: (_) {
+            if (o != null) {
+              final msg = _outputBlock(o);
+              if (msg != null) _toast(msg);
+            }
+            setState(() => _replyAs = o);
+          },
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: c2.surface,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              Text('صيغة الرد: ', style: AppTypography.caption.copyWith(color: c2.inkMuted)),
+              chip(null, 'تعديل الخلاصة'),
+              for (final o in LiveOutput.values)
+                if (o != s.output) chip(o, o.label),
+            ]),
+          ),
+        ),
+        bar,
+      ],
     );
   }
 

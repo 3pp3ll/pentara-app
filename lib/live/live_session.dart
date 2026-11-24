@@ -59,18 +59,23 @@ class LiveAttachment {
 
 /// طلب تعديل من المستخدم بعد الخلاصة، ورد الرئيس عليه.
 class LiveRevision {
-  LiveRevision({required this.request, this.summary = '', this.pending = true, this.error});
+  LiveRevision({required this.request, this.summary = '', this.pending = true, this.error, this.output});
   final String request;
+
+  /// صيغة الرد الجديد؛ null يعني تعديل على الخلاصة بنفس صيغة الجلسة.
+  final LiveOutput? output;
   String summary;
   bool pending;
   String? error;
 
-  Map<String, dynamic> toJson() => {'request': request, 'summary': summary, 'error': error};
+  Map<String, dynamic> toJson() =>
+      {'request': request, 'summary': summary, 'error': error, if (output != null) 'output': output!.name};
   static LiveRevision fromJson(Map<String, dynamic> j) => LiveRevision(
         request: '${j['request'] ?? ''}',
         summary: '${j['summary'] ?? ''}',
         pending: false,
         error: j['error'] as String?,
+        output: j['output'] == null ? null : LiveOutput.values.where((o) => o.name == j['output']).firstOrNull,
       );
 }
 
@@ -566,10 +571,13 @@ class LiveSession extends ChangeNotifier {
   }
 
   /// طلب تعديل على الخلاصة: الرئيس يعيد كتابتها كاملة مع التعديل.
-  Future<void> revise(String request) async {
+  /// [fmt]: صيغة رد جديدة (مثلاً نصوص وتحليل بعد بحث ودراسة) مبنية على الخلاصة السابقة.
+  Future<void> revise(String request, {LiveOutput? fmt}) async {
     final req = request.trim();
     if (req.isEmpty || running || latestSummary.isEmpty) return;
-    if (_continueAsk.hasMatch(req) && req.length < 40) return _continueLatest();
+    if (fmt == output) fmt = null;
+    if (fmt == null && _continueAsk.hasMatch(req) && req.length < 40) return _continueLatest();
+    if (fmt != null) return _replyAs(req, fmt);
     final rev = LiveRevision(request: req);
     final base = latestSummary;
     revisions.add(rev);
@@ -611,6 +619,42 @@ class LiveSession extends ChangeNotifier {
       rev.error = err.message;
     } catch (_) {
       rev.error = 'تعذّر تطبيق التعديل';
+    }
+    rev.pending = false;
+    phase = LivePhase.done;
+    _notify();
+    if (!_stopped) rev.error == null ? Chime.done() : Chime.attention();
+    if (rev.error == null) await save();
+  }
+
+  /// رد جديد بصيغة مختلفة على نفس الجلسة، يعتمد على الخلاصة السابقة كمرجع.
+  Future<void> _replyAs(String req, LiveOutput fmt) async {
+    final rev = LiveRevision(request: req, output: fmt);
+    final base = latestSummary;
+    revisions.add(rev);
+    error = null;
+    _stopped = false;
+    phase = LivePhase.revising;
+    _notify();
+    final task = _task.replaceFirst('نوع المخرج المطلوب: ${output.label}.', 'نوع المخرج المطلوب الآن: ${fmt.label}.');
+    final msgs = [
+      {
+        'role': 'system',
+        'content': '$_house\nأنت «رئيس الجلسة». سبق أن أصدرت الطاولة خلاصة بصيغة «${output.label}». '
+            'المستخدم يطلب الآن رداً جديداً بصيغة «${fmt.label}». اعتمد على الخلاصة السابقة كمرجع، '
+            'ونفّذ طلبه بالصيغة الجديدة كاملة بعناوين وجداول واضحة، ولا تُعِد كتابة الخلاصة السابقة.',
+      },
+      {'role': 'user', 'content': '$task\n\nالخلاصة السابقة (مرجع):\n$base\n\nطلب المستخدم الجديد:\n$req'},
+    ];
+    try {
+      final r = await _api.speak(seat: MemberId.chair.name, kind: 'chair', output: fmt.name, messages: msgs);
+      if (_stopped) return;
+      costMicros += r.costMicros;
+      rev.summary = await _complete(msgs, r.text, r.cut, (t) => rev.summary = t);
+    } on LiveException catch (err) {
+      rev.error = err.message;
+    } catch (_) {
+      rev.error = 'تعذّر إعداد الرد';
     }
     rev.pending = false;
     phase = LivePhase.done;
