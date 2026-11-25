@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -88,6 +89,10 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
   Future<void> _start() async {
     FocusScope.of(context).unfocus();
     final s = _s;
+    if (_loading.isNotEmpty) {
+      _toast('انتظر حتى يكتمل تحميل الملفات');
+      return;
+    }
     s.idea = _idea.text;
     if (s.idea.trim().length < 10) {
       _toast('اكتب فكرتك بتفصيل أكثر (10 أحرف على الأقل)');
@@ -123,34 +128,69 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
   }
 
   /// إرفاق ملفات نصية (txt, md, csv, json, html…) تُقرأ مع الفكرة.
+  /// ملفات جاري تحميلها: الاسم ← نسبة التقدم (0..1).
+  final Map<String, double> _loading = {};
+
   Future<void> _pickFiles() async {
     final s = _s;
     final res = await FilePicker.platform.pickFiles(
       allowMultiple: true,
-      withData: true,
+      withReadStream: true,
       type: FileType.custom,
       allowedExtensions: const ['txt', 'md', 'csv', 'json', 'html', 'xml', 'tsv', 'log', 'dart', 'js', 'css', 'yaml'],
     );
     if (res == null || !mounted) return;
+    setState(() {
+      for (final f in res.files) {
+        _loading[f.name] = 0;
+      }
+    });
     var used = s.attachments.fold<int>(0, (a, x) => a + x.text.length);
     var skipped = 0;
+    var added = 0;
     for (final f in res.files) {
-      final bytes = f.bytes;
-      if (bytes == null) continue;
-      var text = utf8.decode(bytes, allowMalformed: true).trim();
-      if (text.isEmpty) continue;
+      final buf = BytesBuilder(copy: false);
+      try {
+        final stream = f.readStream;
+        if (stream != null) {
+          var last = DateTime.now();
+          await for (final chunk in stream) {
+            buf.add(chunk);
+            final now = DateTime.now();
+            if (f.size > 0 && mounted && now.difference(last).inMilliseconds > 60) {
+              last = now;
+              setState(() => _loading[f.name] = (buf.length / f.size).clamp(0.0, 1.0).toDouble());
+            }
+          }
+        } else if (f.bytes != null) {
+          buf.add(f.bytes!);
+        }
+      } catch (_) {}
+      if (!mounted) return;
+      _loading.remove(f.name);
+      var text = utf8.decode(buf.takeBytes(), allowMalformed: true).trim();
+      if (text.isEmpty) {
+        setState(() {});
+        continue;
+      }
       final room = LiveAttachment.maxTotal - used;
       if (room <= 500) {
         skipped++;
+        setState(() {});
         continue;
       }
       final cap = room < LiveAttachment.maxChars ? room : LiveAttachment.maxChars;
       if (text.length > cap) text = '${text.substring(0, cap)}\n…(اختُصر الملف)';
       s.attachments.add(LiveAttachment(name: f.name, text: text));
       used += text.length;
+      added++;
+      setState(() {});
     }
-    setState(() {});
-    if (skipped > 0) _toast('تجاوزت الحد المسموح للمرفقات؛ لم يُضف $skipped ملف');
+    if (skipped > 0) {
+      _toast('تجاوزت الحد المسموح للمرفقات؛ لم يُضف $skipped ملف');
+    } else if (added > 0) {
+      _toast(added == 1 ? '✓ اكتمل تحميل الملف' : '✓ اكتمل تحميل $added ملفات');
+    }
   }
 
   Future<void> _send() async {
@@ -593,6 +633,23 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                 backgroundColor: c.surfaceSoft,
                 side: BorderSide(color: c.border),
                 onDeleted: () => setState(() => s.attachments.remove(a)),
+              ),
+            for (final e in _loading.entries)
+              Chip(
+                avatar: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    value: e.value <= 0 ? null : e.value,
+                    strokeWidth: 2.6,
+                    color: c.goldLine,
+                    backgroundColor: c.border,
+                  ),
+                ),
+                label: Text('${e.key} · ${(e.value * 100).round()}%', overflow: TextOverflow.ellipsis),
+                labelStyle: AppTypography.caption.copyWith(color: c.inkMuted),
+                backgroundColor: c.surface,
+                side: BorderSide(color: c.goldLine),
               ),
           ],
         ),
