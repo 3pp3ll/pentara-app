@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
+import '../widgets/center_panel.dart';
 import '../widgets/glyph.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
@@ -43,14 +44,7 @@ String starsText(int n) => n <= 0 ? '—' : '★' * n + '☆' * (5 - n);
 
 /// نافذة تقييم الجلسة: نجوم، هل ستستخدم النتيجة، المعايير العشرة، التحقق، ملاحظة.
 Future<void> showEvalSheet(BuildContext context, LiveSession s) async {
-  final saved = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: context.colors.bg,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-    builder: (_) => _EvalSheet(session: s),
-  );
+  final saved = await showCenterPanel<bool>(context, (_) => _EvalSheet(session: s), maxWidth: 620);
   if (saved == true && context.mounted) {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
@@ -147,24 +141,10 @@ class _EvalSheetState extends State<_EvalSheet> {
           enabledBorder:
               OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: c.border)),
         );
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.9,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        builder: (context, ctrl) => ListView(
-          controller: ctrl,
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
+    return ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(18, 6, 18, 24),
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(color: c.border, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
             const SizedBox(height: 12),
             Row(children: [
               const Glyph(Icons.star_rounded, tone: GlyphTone.gold, size: 38),
@@ -244,9 +224,7 @@ class _EvalSheetState extends State<_EvalSheet> {
               Text(msg!, style: AppTypography.label.copyWith(color: c.danger.ink)),
             ],
           ],
-        ),
-      ),
-    );
+        );
   }
 }
 

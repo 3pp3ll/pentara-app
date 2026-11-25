@@ -236,7 +236,9 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
+                  Text('آخر المشاريع', style: AppTypography.title.copyWith(color: c.ink)),
+                  const SizedBox(height: 10),
                   if (hub.loading && hub.sessions.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(24),

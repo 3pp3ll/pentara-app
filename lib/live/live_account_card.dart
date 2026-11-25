@@ -7,6 +7,7 @@ import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
 import 'live_session.dart';
+import '../widgets/center_panel.dart';
 
 /// بطاقة الحساب: قبل الدخول (تسجيل دخول / حساب جديد)، وبعده (الرصيد، الباقة،
 /// تفعيل كود المتجر، تعديل البيانات، الخروج).
@@ -413,13 +414,7 @@ class LiveAccountActions extends StatelessWidget {
           tone: GlyphTone.blue,
           title: 'تعديل البيانات',
           sub: u.pendingEmail.isNotEmpty ? 'البريد الجديد بانتظار موافقة الإدارة' : 'الاسم والبريد وكلمة المرور',
-          onTap: () => showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: context.colors.surface,
-            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-            builder: (_) => const _EditSheet(),
-          ),
+          onTap: () => showCenterPanel<void>(context, (_) => const _EditSheet()),
         );
       },
     );

@@ -11,6 +11,7 @@ import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
 import 'live_session.dart';
+import '../widgets/center_panel.dart';
 
 const _danger = Color(0xFFA8322E);
 const _ok = Color(0xFF1F6B4A);
@@ -992,13 +993,10 @@ class _UsersState extends State<_Users> {
     final c = context.colors;
     final isOwnerViewer = LiveController.instance.user?.isOwner ?? false;
     final credit = TextEditingController();
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: c.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+    showCenterPanel<void>(
+      context,
+      (ctx) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
