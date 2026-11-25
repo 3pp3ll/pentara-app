@@ -14,6 +14,8 @@ import '../widgets/gold_button.dart';
 import '../widgets/member_icons.dart';
 import '../widgets/pentara_logo.dart';
 import '../widgets/project_card.dart';
+import '../live/live_eval.dart';
+import '../live/live_session.dart';
 
 const List<String> _weekdays = [
   'الاثنين',
@@ -192,11 +194,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 24),
 
           Text(
-            'آخر المشاريع',
+            'تحليل التقييمات',
             style: AppTypography.title.copyWith(color: c.ink),
           ),
           const SizedBox(height: 12),
-          LiveRecentSessions(onOpen: widget.onOpenProject),
+          ListenableBuilder(
+            listenable: LiveHub.instance,
+            builder: (context, _) => LiveEvalAnalysis(onOpen: widget.onOpenProject),
+          ),
         ],
       ),
     );
@@ -478,6 +483,28 @@ class _LastSessionBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    return ListenableBuilder(
+      listenable: LiveHub.instance,
+      builder: (context, _) {
+        final hub = LiveHub.instance;
+        // آخر جلسة فعلية: الأحدث بين الجلسات المحفوظة والجلسة الحالية.
+        int? cost;
+        DateTime? at;
+        for (final m in hub.sessions) {
+          if (at == null || m.createdAt.isAfter(at)) {
+            at = m.createdAt;
+            cost = m.costMicros;
+          }
+        }
+        final cur = hub.current;
+        if (cur.costMicros > 0 && (at == null || !cur.createdAt.isBefore(at))) cost = cur.costMicros;
+        if (cost == null) return const SizedBox.shrink();
+        return _badge(c, formatMicros(cost));
+      },
+    );
+  }
+
+  Widget _badge(PentaraColors c, String value) {
     return DecoratedBox(
       decoration: ShapeDecoration(
         color: c.surface,
@@ -496,7 +523,7 @@ class _LastSessionBadge extends StatelessWidget {
             Directionality(
               textDirection: TextDirection.ltr,
               child: Text(
-                formatUsd(MockData.lastSessionCostCents),
+                value,
                 style:
                     latinFigures(AppTypography.caption).copyWith(color: c.ink),
               ),
