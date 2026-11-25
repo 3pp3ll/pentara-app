@@ -6,6 +6,7 @@ import '../widgets/glyph.dart';
 import '../widgets/gold_button.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
+import 'live_eval.dart';
 import 'live_session.dart';
 import 'live_stats.dart';
 import 'scroll_top.dart';
@@ -324,6 +325,10 @@ class _LiveProjectsScreenState extends State<LiveProjectsScreen> {
                             style: AppTypography.caption.copyWith(color: c.inkMuted),
                           ),
                         ),
+                        if (m.stars > 0) ...[
+                          const SizedBox(width: 8),
+                          EvalBadge(m),
+                        ],
                         const SizedBox(width: 8),
                         Directionality(
                           textDirection: TextDirection.ltr,

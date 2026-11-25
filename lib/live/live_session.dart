@@ -79,6 +79,49 @@ class LiveRevision {
       );
 }
 
+/// تقييم المستخدم للجلسة (نفس تقييم صفحة المختبر).
+class LiveEval {
+  LiveEval({
+    required this.stars,
+    required this.use,
+    required this.verify,
+    required this.checks,
+    required this.note,
+    required this.date,
+  });
+  final int stars;
+  final String use;
+  final String verify;
+  final List<bool> checks;
+  final String note;
+  final DateTime date;
+
+  int get score => checks.where((x) => x).length;
+
+  Map<String, dynamic> toJson() => {
+        'stars': stars,
+        'use': use,
+        'verify': verify,
+        'checks': checks,
+        'note': note,
+        'date': date.toIso8601String(),
+      };
+
+  static LiveEval? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final stars = (j['stars'] as num?)?.toInt() ?? 0;
+    if (stars <= 0) return null;
+    return LiveEval(
+      stars: stars.clamp(1, 5),
+      use: '${j['use'] ?? ''}',
+      verify: '${j['verify'] ?? 'not_run'}',
+      checks: [for (final x in (j['checks'] as List? ?? const [])) x == true],
+      note: '${j['note'] ?? ''}',
+      date: DateTime.tryParse('${j['date']}') ?? DateTime.now(),
+    );
+  }
+}
+
 const Map<MemberId, String> _roles = {
   MemberId.engineer:
       'أنت «المهندس»: تركّز على البنية والتنظيم وتقسيم العمل إلى أجزاء واضحة.',
@@ -125,6 +168,9 @@ class LiveSession extends ChangeNotifier {
   DateTime createdAt = DateTime.now();
   String idea = '';
   LiveOutput output = LiveOutput.text;
+
+  /// تقييم المستخدم للجلسة بعد الخلاصة.
+  LiveEval? eval;
   LivePhase phase = LivePhase.idle;
   final List<LiveEntry> entries = [];
   final List<String> notes = [];
@@ -217,6 +263,7 @@ class LiveSession extends ChangeNotifier {
         'summaryCut': summaryCut,
         'revisions': [for (final r in revisions.where((r) => !r.pending)) r.toJson()],
         'costMicros': costMicros,
+        if (eval != null) 'eval': eval!.toJson(),
       };
 
   static LiveSession fromJson(Map<String, dynamic> j) {
@@ -240,6 +287,7 @@ class LiveSession extends ChangeNotifier {
       if (r is Map<String, dynamic>) s.revisions.add(LiveRevision.fromJson(r));
     }
     s.costMicros = (j['costMicros'] as num?)?.toInt() ?? 0;
+    s.eval = LiveEval.fromJson(j['eval']);
     s.phase = s.summary.isNotEmpty ? LivePhase.done : LivePhase.failed;
     s.saved = true;
     return s;
@@ -673,6 +721,11 @@ class SessionMeta {
     required this.createdAt,
     required this.costMicros,
     required this.status,
+    this.stars = 0,
+    this.evalChecks = const [],
+    this.evalUse = '',
+    this.evalVerify = '',
+    this.evalNote = '',
   });
 
   factory SessionMeta.fromJson(Map<String, dynamic> j) => SessionMeta(
@@ -682,6 +735,13 @@ class SessionMeta {
         createdAt: DateTime.tryParse('${j['createdAt']}') ?? DateTime.now(),
         costMicros: (j['costMicros'] as num?)?.toInt() ?? 0,
         status: '${j['status'] ?? 'done'}',
+        stars: ((j['ev'] is Map ? (j['ev'] as Map)['s'] : null) as num?)?.toInt() ?? 0,
+        evalChecks: [
+          for (final ch in '${j['ev'] is Map ? (j['ev'] as Map)['k'] ?? '' : ''}'.split('')) ch == '1',
+        ],
+        evalUse: '${j['ev'] is Map ? (j['ev'] as Map)['u'] ?? '' : ''}',
+        evalVerify: '${j['ev'] is Map ? (j['ev'] as Map)['v'] ?? '' : ''}',
+        evalNote: '${j['ev'] is Map ? (j['ev'] as Map)['n'] ?? '' : ''}',
       );
 
   final String id;
@@ -690,6 +750,15 @@ class SessionMeta {
   final DateTime createdAt;
   final int costMicros;
   final String status;
+
+  /// ملخص التقييم (0 = لم تُقيَّم).
+  final int stars;
+  final List<bool> evalChecks;
+  final String evalUse;
+  final String evalVerify;
+  final String evalNote;
+  int get evalScore => evalChecks.where((x) => x).length;
+  int get evalTotal => evalChecks.length;
 }
 
 /// الجلسة الحالية في تبويب الطاولة + قائمة الجلسات المحفوظة.

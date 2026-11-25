@@ -16,6 +16,7 @@ import '../widgets/member_avatar.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_account_card.dart';
 import 'live_api.dart';
+import 'live_eval.dart';
 import 'live_session.dart';
 import 'doc_export.dart';
 import 'live_stats.dart';
@@ -365,6 +366,30 @@ class _LiveTableScreenState extends State<LiveTableScreen> {
                           style: AppTypography.label.copyWith(color: const Color(0xFFA8322E)))
                     else
                       _summary(context, r.summary, r.output == null ? 'الخلاصة بعد التعديل' : 'الرد: ${r.output!.label}'),
+                  ],
+                  if (!live.isGuest && s.phase == LivePhase.done && s.summary.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          await showEvalSheet(context, s);
+                          if (mounted) setState(() {});
+                        },
+                        icon: const Icon(Icons.star_rounded, size: 20, color: Color(0xFFE0A800)),
+                        label: Text(
+                          s.eval == null
+                              ? 'قيّم الجلسة'
+                              : 'تقييمك: ${s.eval!.stars}★ · ${s.eval!.score}/${kEvalCriteria.length} (تعديل)',
+                          style: AppTypography.label.copyWith(color: c.goldText),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: c.goldLine),
+                          shape: const StadiumBorder(),
+                          minimumSize: const Size(44, 44),
+                        ),
+                      ),
+                    ),
                   ],
                   if (live.isGuest && s.phase == LivePhase.done) ...[
                     const SizedBox(height: 16),

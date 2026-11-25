@@ -5,6 +5,7 @@ import '../theme/app_typography.dart';
 import '../widgets/glyph.dart';
 import '../widgets/project_card.dart' show latinFigures;
 import 'live_api.dart';
+import 'live_eval.dart';
 import 'live_projects_screen.dart';
 import 'live_session.dart';
 import 'live_stats.dart';
@@ -117,6 +118,10 @@ class _LiveLabScreenState extends State<LiveLabScreen> {
                       Text('آخر جلساتك', style: AppTypography.title.copyWith(color: c.ink)),
                       const SizedBox(height: 10),
                       LiveRecentSessions(onOpen: widget.onOpen),
+                      const SizedBox(height: 24),
+                      Text('تحليل التقييمات', style: AppTypography.title.copyWith(color: c.ink)),
+                      const SizedBox(height: 10),
+                      LiveEvalAnalysis(onOpen: widget.onOpen),
                     ],
                   ],
                 ),
