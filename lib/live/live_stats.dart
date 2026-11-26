@@ -45,6 +45,8 @@ class CategorySummary extends StatelessWidget {
     LiveOutput.research: Icons.travel_explore_rounded,
     LiveOutput.appIdea: Icons.phone_iphone_rounded,
     LiveOutput.web: Icons.language_rounded,
+    LiveOutput.study: Icons.query_stats_rounded,
+    LiveOutput.auto: Icons.auto_awesome_rounded,
   };
 
   @override
@@ -62,11 +64,17 @@ class CategorySummary extends StatelessWidget {
               style: AppTypography.caption.copyWith(color: c.inkMuted),
             ),
             const SizedBox(height: 8),
-            Row(
+            LayoutBuilder(builder: (context, box) {
+              // 7 أنواع: في الشاشات الضيقة تتمرر أفقياً بدل ما تنضغط.
+              final n = LiveOutput.values.length;
+              final fit = (box.maxWidth - 8 * (n - 1)) / n;
+              final w = fit >= 72 ? fit : 76.0;
+              final row = Row(
               children: [
                 for (final o in LiveOutput.values) ...[
                   if (o != LiveOutput.values.first) const SizedBox(width: 8),
-                  Expanded(
+                  SizedBox(
+                    width: w,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
                       decoration: BoxDecoration(
@@ -94,7 +102,9 @@ class CategorySummary extends StatelessWidget {
                   ),
                 ],
               ],
-            ),
+            );
+              return fit >= 72 ? row : SingleChildScrollView(scrollDirection: Axis.horizontal, child: row);
+            }),
           ],
         );
       },

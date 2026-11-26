@@ -12,13 +12,38 @@ enum LiveOutput {
   plan('خطة عمل', 'خطط'),
   research('بحث ودراسة', 'بحثية'),
   appIdea('فكرة تطبيق', 'برمجية'),
-  web('صفحة ويب', 'ويب');
+  web('صفحة ويب', 'ويب'),
+  study('دراسة جدوى ومالية', 'مالية'),
+  auto('تلقائي', 'تلقائي');
 
   const LiveOutput(this.label, this.category);
   final String label;
 
   /// اسم الفئة في ملخص المشاريع والمختبر.
   final String category;
+
+  /// قواعد كتابة الخلاصة لكل نوع (نفس صفحة المختبر).
+  String get rule {
+    const noCode = ' لا تكتب أي كود HTML أو برمجة، واكتب بعناوين Markdown وجداول واضحة.';
+    return switch (this) {
+      LiveOutput.text =>
+        'نصوص وتحليل فقط. لا تكتب أي كود HTML أو برمجة. قدّم تحليلاً مكتوباً منظماً بعناوين وجداول Markdown وخطوات عملية.',
+      LiveOutput.plan => 'خطة عمل تنفيذية.$noCode يجب أن تتضمن الخلاصة: ملخصاً تنفيذياً، والأهداف القابلة للقياس، '
+          'ومراحل التنفيذ في جدول (المرحلة، المدة، المهام، المسؤول، المخرج)، والميزانية التقديرية في جدول، '
+          'والمخاطر وطرق تفاديها، ومؤشرات النجاح، وأول 3 خطوات يبدأ بها المستخدم هذا الأسبوع.',
+      LiveOutput.research => 'بحث ودراسة.$noCode يجب أن تتضمن الخلاصة: سؤال البحث، والمنهجية باختصار، '
+          'والنتائج مرتبة بعناوين مع الأرقام والمصادر (اسم المصدر وسنته، والرابط إن كنت متأكداً منه)، '
+          'وجدول مقارنة إن وُجدت بدائل، والخلاصة والتوصيات. افصل بوضوح بين المعلومة المؤكدة والتقدير، ولا تخترع إحصاءات أو مصادر.',
+      LiveOutput.study => 'دراسة جدوى ومالية.$noCode يجب أن تتضمن الخلاصة: وصف السوق والعميل المستهدف، '
+          'والمنافسين في جدول، والتكاليف التأسيسية والتشغيلية الشهرية في جداول، والإيرادات المتوقعة لـ 12 شهراً في جدول شهري، '
+          'ونقطة التعادل، وثلاثة سيناريوهات (متحفظ، متوقع، متفائل) بالأرقام، والمخاطر، والتوصية النهائية. '
+          'اذكر كل افتراض بجانب رقمه، وراجع كل عملية حسابية قبل كتابتها، والعملة بالريال السعودي ما لم يُطلب غيره.',
+      LiveOutput.appIdea => 'فكرة تطبيق: وصف التطبيق وشاشاته ومزاياه وخطة بنائه بتقنية Flutter.',
+      LiveOutput.web => 'صفحة ويب: أقسام الصفحة بالترتيب ونص كل قسم جاهزاً للنشر.',
+      LiveOutput.auto => 'تحدده أنت حسب الطلب: اختر الصيغة الأنسب (تحليل، خطة عمل، بحث، دراسة جدوى ومالية، '
+          'أو وصف تطبيق أو صفحة) واذكر في أول سطر من الخلاصة الصيغة التي اخترتها، ثم التزم بها.',
+    };
+  }
 }
 
 enum LivePhase { idle, round1, round2, summary, revising, done, failed }
@@ -167,7 +192,7 @@ class LiveSession extends ChangeNotifier {
 
   DateTime createdAt = DateTime.now();
   String idea = '';
-  LiveOutput output = LiveOutput.text;
+  LiveOutput output = LiveOutput.auto;
 
   /// تقييم المستخدم للجلسة بعد الخلاصة.
   LiveEval? eval;
@@ -307,7 +332,7 @@ class LiveSession extends ChangeNotifier {
   // ---- النقاش -----------------------------------------------------------------
 
   String get _task {
-    final b = StringBuffer('نوع المخرج المطلوب: ${output.label}.\n\nفكرة المستخدم:\n${idea.trim()}');
+    final b = StringBuffer('نوع المخرج المطلوب: ${output.label}.\nطريقة كتابة الخلاصة: ${output.rule}\n\nفكرة المستخدم:\n${idea.trim()}');
     if (sources.trim().isNotEmpty) b.write('\n\nمصادر ذكرها المستخدم (روابط أو مراجع):\n${sources.trim()}');
     if (attachments.isNotEmpty) {
       b.write('\n\nملفات أرفقها المستخدم (اعتمد عليها):');
@@ -684,7 +709,9 @@ class LiveSession extends ChangeNotifier {
     _stopped = false;
     phase = LivePhase.revising;
     _notify();
-    final task = _task.replaceFirst('نوع المخرج المطلوب: ${output.label}.', 'نوع المخرج المطلوب الآن: ${fmt.label}.');
+    final task = _task
+        .replaceFirst('نوع المخرج المطلوب: ${output.label}.', 'نوع المخرج المطلوب الآن: ${fmt.label}.')
+        .replaceFirst('طريقة كتابة الخلاصة: ${output.rule}', 'طريقة كتابة الرد: ${fmt.rule}');
     final msgs = [
       {
         'role': 'system',
