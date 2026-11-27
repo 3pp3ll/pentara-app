@@ -168,6 +168,10 @@ class LiveController extends ChangeNotifier {
   /// رابط لوحة التحكم على الموقع مع دخول تلقائي بحساب التطبيق (الرمز في # فلا يصل لأي سجل خادم).
   String get webAdminUrl => webAdminAt('');
 
+  /// المختبر الخاص على السيرفر (للمالك): الدخول بنفس جلسة التطبيق.
+  String get labUrl =>
+      _login == null ? '$kServerUrl/lab' : '$kServerUrl/lab#app=${Uri.encodeComponent(_login!)}';
+
   /// يفتح قسماً محدداً من لوحة الموقع (finance, plans, users…).
   String webAdminAt(String section) {
     if (_login == null) return '$kServerUrl/admin${section.isEmpty ? '' : '#/$section'}';

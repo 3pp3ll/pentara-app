@@ -103,6 +103,8 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
               _Section(Icons.history_rounded, 'السجل', 'كل حركة بوقتها', () => const _Log()),
               _Section(Icons.mark_email_unread_rounded, 'طلبات البريد', cnt(d['pendingEmails'], 'طلب'), null,
                   web: 'emails'),
+              if (isOwner)
+                const _Section(Icons.science_rounded, 'المختبر الخاص', 'المختبر والصور والفيديو', null, web: '@lab'),
             ];
             return RefreshIndicator(
               color: c.goldLine,
@@ -190,10 +192,12 @@ class _LiveAdminScreenState extends State<LiveAdminScreen> {
 
   /// لوحة الموقع تفتح داخل التطبيق (متصفح مدمج) وتدخل تلقائياً بحسابك.
   Future<void> _openWeb([String section = '']) async {
-    final uri = Uri.parse(live.webAdminAt(section));
+    final lab = section == '@lab';
+    final uri = Uri.parse(lab ? live.labUrl : live.webAdminAt(section));
     var ok = false;
     try {
-      ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      // المختبر صفحة كاملة: يفتح في المتصفح نفسه (تبويب جديد في الكمبيوتر).
+      ok = await launchUrl(uri, mode: lab ? LaunchMode.externalApplication : LaunchMode.inAppBrowserView);
     } catch (_) {}
     if (!ok) {
       try {
